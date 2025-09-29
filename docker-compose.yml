@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  zoom-extractor:
+    build: .
+    container_name: zoom-extractor
+    volumes:
+      - ./zoom_recordings:/app/zoom_recordings
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Starting Zoom Extractor...' &&
+        python test_installation.py &&
+        python total_count.py &&
+        python zoom_extract.py --log-file /app/logs/extraction.log
+      "
+
+  # Optional: Add a monitoring service
+  monitor:
+    image: nginx:alpine
+    container_name: zoom-extractor-monitor
+    ports:
+      - "8080:80"
+    volumes:
+      - ./monitor/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./logs:/usr/share/nginx/html/logs:ro
+    depends_on:
+      - zoom-extractor
+    profiles:
+      - monitoring
