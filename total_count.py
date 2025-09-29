@@ -146,8 +146,57 @@ def total_count():
                     logger.info(f"  ⭕ No recordings")
                 
             except Exception as e:
+                error_msg = str(e)
                 logger.error(f"Error processing {user_email}: {e}")
-                continue
+                
+                # Check if it's a token expiration error
+                if "401" in error_msg or "Unauthorized" in error_msg:
+                    logger.warning("Token expired, refreshing...")
+                    try:
+                        # Refresh the auth headers
+                        auth = get_auth_from_env()
+                        headers = auth.get_auth_headers()
+                        
+                        # Update the components with new headers
+                        user_enumerator = UserEnumerator(headers)
+                        recordings_lister = RecordingsLister(headers)
+                        
+                        logger.info("Token refreshed, retrying user...")
+                        
+                        # Retry the current user
+                        try:
+                            user_meetings = 0
+                            user_files = 0
+                            
+                            for start_date, end_date in date_generator.generate_monthly_windows():
+                                meetings = list(recordings_lister.list_user_recordings(
+                                    user_id, start_date, end_date
+                                ))
+                                
+                                for meeting in meetings:
+                                    user_meetings += 1
+                                    user_files += len(meeting.get("processed_files", []))
+                            
+                            total_meetings += user_meetings
+                            total_files += user_files
+                            processed_users = i
+                            
+                            if user_meetings > 0:
+                                users_with_recordings += 1
+                                logger.info(f"  ✅ {user_meetings} meetings, {user_files} files (after retry)")
+                            else:
+                                logger.info(f"  ⭕ No recordings (after retry)")
+                        
+                        except Exception as retry_error:
+                            logger.error(f"Retry failed for {user_email}: {retry_error}")
+                            continue
+                    
+                    except Exception as refresh_error:
+                        logger.error(f"Token refresh failed: {refresh_error}")
+                        continue
+                else:
+                    # Non-token error, just skip
+                    continue
         
         # Save final results
         final_results = {

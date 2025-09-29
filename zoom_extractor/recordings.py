@@ -48,8 +48,7 @@ class RecordingsLister:
         params = {
             "from": from_date,
             "to": to_date,
-            "page_size": 300,  # Maximum allowed by Zoom
-            "include_fields": "host_id,topic,type,start_time,duration,total_size,recording_count,files,uuid,id,account_id,host_email,dept,user_type"
+            "page_size": 30  # Reduced page size for better compatibility
         }
         
         if include_trash:
