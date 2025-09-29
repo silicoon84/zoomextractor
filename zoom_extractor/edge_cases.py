@@ -187,7 +187,8 @@ class EdgeCaseHandler:
             logger.warning(f"File {file_info.get('id', 'unknown')} has zero size")
         
         # Check file status
-        status = file_info.get("status", "").lower()
+        status_raw = file_info.get("status", "")
+        status = str(status_raw).lower() if status_raw else ""
         if status == "processing":
             return False, "File is still processing"
         
@@ -234,17 +235,20 @@ class EdgeCaseHandler:
         warnings = []
         
         # Check user type
-        user_type = user_info.get("type", "").lower()
+        user_type_raw = user_info.get("type", "")
+        user_type = str(user_type_raw).lower() if user_type_raw else ""
         if user_type == "basic":
             warnings.append("User has basic account type, may have recording limitations")
         
         # Check user status
-        status = user_info.get("status", "").lower()
+        status_raw = user_info.get("status", "")
+        status = str(status_raw).lower() if status_raw else ""
         if status != "active":
             warnings.append(f"User status is '{status}', may affect recording access")
         
         # Check role
-        role_name = user_info.get("role_name", "").lower()
+        role_name_raw = user_info.get("role_name", "")
+        role_name = str(role_name_raw).lower() if role_name_raw else ""
         if "admin" not in role_name and "owner" not in role_name:
             warnings.append("User may not have admin privileges for downloading recordings")
         
@@ -263,7 +267,8 @@ class EdgeCaseHandler:
         warnings = []
         
         # Check meeting type
-        meeting_type = meeting_info.get("type", "").lower()
+        meeting_type_raw = meeting_info.get("type", "")
+        meeting_type = str(meeting_type_raw).lower() if meeting_type_raw else ""
         if meeting_type == "webinar":
             warnings.append("Webinar recordings may have different access restrictions")
         

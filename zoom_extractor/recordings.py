@@ -132,7 +132,8 @@ class RecordingsLister:
             Processed file information or None if invalid
         """
         # Extract file type and determine extension
-        file_type = file_info.get("file_type", "").lower()
+        file_type_raw = file_info.get("file_type", "")
+        file_type = str(file_type_raw).lower() if file_type_raw else ""
         file_extension = file_info.get("file_extension", "")
         
         # Map file types to extensions if not provided
@@ -155,7 +156,8 @@ class RecordingsLister:
             return None
         
         # Skip files that are not ready for download
-        status = file_info.get("status", "").lower()
+        status_raw = file_info.get("status", "")
+        status = str(status_raw).lower() if status_raw else ""
         if status == "processing":
             logger.debug(f"File {file_info.get('id', 'unknown')} is still processing")
             return None
