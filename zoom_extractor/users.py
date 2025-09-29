@@ -26,22 +26,21 @@ class UserEnumerator:
         self.base_url = "https://api.zoom.us/v2"
     
     def list_all_users(self, user_filter: Optional[List[str]] = None, 
-                      user_type: str = "all") -> Iterator[Dict]:
+                      user_type: str = "active") -> Iterator[Dict]:
         """
         List all users with pagination support.
         
         Args:
             user_filter: Optional list of user emails/IDs to filter by
-            user_type: Type of users to list (all, active, inactive, pending)
+            user_type: Type of users to list (active, inactive, pending)
             
         Yields:
             User dictionaries from the API
         """
         url = f"{self.base_url}/users"
         params = {
-            "page_size": 30,  # Reduced page size for better compatibility
-            "status": user_type,
-            "include_fields": "id,email,first_name,last_name,display_name,type,status,role_name"
+            "page_size": 30,  # Maximum allowed by Zoom API
+            "status": user_type
         }
         
         next_page_token = None

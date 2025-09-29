@@ -118,8 +118,8 @@ class ZoomExtractor:
         self.logger.info("Starting Zoom recordings extraction")
         
         try:
-            # Get all users
-            users = list(self.user_enumerator.list_all_users(self.user_filter))
+            # Get all users (start with active users only)
+            users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="active"))
             self.logger.info(f"Found {len(users)} users to process")
             
             if not users:
