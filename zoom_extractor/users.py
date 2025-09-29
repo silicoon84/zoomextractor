@@ -39,9 +39,9 @@ class UserEnumerator:
         """
         url = f"{self.base_url}/users"
         params = {
-            "page_size": 300,  # Maximum allowed by Zoom
+            "page_size": 30,  # Reduced page size for better compatibility
             "status": user_type,
-            "include_fields": "custom_attributes,dept,host_key,id,lastClientVersion,lastLoginTime,location,phoneNumber,pmi,role_name,sip_phone,total_room,type,use_pmi,vanity_url,verified,display_name,email,first_name,last_name,account_id,account_number,created_time,jid"
+            "include_fields": "id,email,first_name,last_name,display_name,type,status,role_name"
         }
         
         next_page_token = None
