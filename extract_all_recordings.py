@@ -177,30 +177,40 @@ def extract_all_recordings(
                         for file_info in files:
                             user_files += 1
                             
+                            file_path = structure.get_file_path(user, recording, file_info)
+                            
                             if not dry_run:
                                 # Download the file
-                                file_path = structure.get_file_path(user, recording, file_info)
-                                
                                 try:
                                     # Get access token from auth headers
                                     access_token = headers.get("Authorization", "").replace("Bearer ", "")
                                     success, stats = downloader.download_file(file_info, file_path, access_token)
+                                    
                                     if success:
                                         file_size = stats.get("file_size", 0)
                                         total_size += file_size
                                         print(f"         ✅ Downloaded: {file_path.name}")
+                                        
+                                        # Log successful download to state
+                                        state.log_file(user, recording, file_info, file_path, (success, stats))
                                     else:
                                         print(f"         ❌ Failed: {file_path.name}")
+                                        
+                                        # Log failed download to state
+                                        state.log_file(user, recording, file_info, file_path, (success, stats), "Download failed")
                                 except Exception as e:
                                     print(f"         ❌ Download error: {e}")
+                                    
+                                    # Log error to state
+                                    state.log_file(user, recording, file_info, file_path, (False, {}), str(e))
                             else:
                                 # Dry run - just count
                                 file_size = file_info.get("file_size", 0)
                                 total_size += file_size
                                 print(f"         🔍 Would download: {file_info.get('file_type', 'unknown')} ({file_size} bytes)")
-                            
-                            # Log file to state
-                            state.log_file(user, recording, file_info, "downloaded" if not dry_run else "dry_run")
+                                
+                                # Log dry run to state
+                                state.log_file(user, recording, file_info, file_path, (True, {"file_size": file_size}), "Dry run")
                 
                 except Exception as e:
                     print(f"      ❌ Error processing date window: {e}")
