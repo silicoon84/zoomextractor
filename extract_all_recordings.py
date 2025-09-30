@@ -22,7 +22,7 @@ from zoom_extractor.users import UserEnumerator
 from zoom_extractor.recordings import RecordingsLister
 from zoom_extractor.dates import DateWindowGenerator
 from zoom_extractor.downloader import FileDownloader
-from zoom_extractor.structure import get_output_path, sanitize_filename
+from zoom_extractor.structure import DirectoryStructure
 from zoom_extractor.state import ExtractionState
 from zoom_extractor.edge_cases import validate_user_access, validate_meeting_access
 
@@ -81,6 +81,7 @@ def extract_all_recordings(
     user_enumerator = UserEnumerator(headers)
     recordings_lister = RecordingsLister(headers)
     date_generator = DateWindowGenerator(from_date, to_date)
+    structure = DirectoryStructure(output_dir)
     
     if not dry_run:
         downloader = FileDownloader(max_concurrent)
@@ -164,9 +165,7 @@ def extract_all_recordings(
                                 if not dry_run:
                                     # Download the file
                                     download_url = processed_file["download_url"]
-                                    file_path = get_output_path(
-                                        output_path, user, recording, processed_file
-                                    )
+                                    file_path = structure.get_file_path(user, recording, processed_file)
                                     
                                     try:
                                         success = downloader.download_file(download_url, file_path)
