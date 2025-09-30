@@ -175,7 +175,7 @@ def extract_all_recordings(
                         # Process files
                         files = recording.get("files", [])
                         for file_info in files:
-                            processed_file = recordings_lister.process_file(file_info)
+                            processed_file = recordings_lister._process_recording_file(file_info)
                             if processed_file:
                                 user_files += 1
                                 
