@@ -246,13 +246,29 @@ def extract_all_recordings(
     # Save final state
     state._save_state()
     
+    # Save summary to log file
+    log_file = output_path / "_metadata" / "extraction_summary.log"
+    with open(log_file, "w") as f:
+        f.write(f"Zoom Recordings Extraction Summary\n")
+        f.write(f"===================================\n")
+        f.write(f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Users processed: {processed_users}/{len(all_users)}\n")
+        f.write(f"Total meetings: {total_meetings}\n")
+        f.write(f"Total files: {total_files}\n")
+        f.write(f"Total size: {total_size / (1024**3):.2f} GB\n")
+        f.write(f"Dry run: {dry_run}\n")
+        f.write(f"Output directory: {output_path.absolute()}\n")
+    
+    print(f"📝 Summary saved to: {log_file}")
+    
     return {
         "users_processed": processed_users,
         "total_users": len(all_users),
         "total_meetings": total_meetings,
         "total_files": total_files,
         "total_size_gb": total_size / (1024**3),
-        "dry_run": dry_run
+        "dry_run": dry_run,
+        "log_file": str(log_file)
     }
 
 def main():
