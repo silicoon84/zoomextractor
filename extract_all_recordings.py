@@ -179,13 +179,14 @@ def extract_all_recordings(
                             
                             if not dry_run:
                                 # Download the file
-                                download_url = file_info["download_url"]
                                 file_path = structure.get_file_path(user, recording, file_info)
                                 
                                 try:
-                                    success = downloader.download_file(download_url, file_path)
+                                    # Get access token from auth headers
+                                    access_token = headers.get("Authorization", "").replace("Bearer ", "")
+                                    success, stats = downloader.download_file(file_info, file_path, access_token)
                                     if success:
-                                        file_size = file_info.get("file_size", 0)
+                                        file_size = stats.get("file_size", 0)
                                         total_size += file_size
                                         print(f"         ✅ Downloaded: {file_path.name}")
                                     else:
