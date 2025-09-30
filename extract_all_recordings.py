@@ -181,6 +181,15 @@ def extract_all_recordings(
                             
                             file_path = structure.get_file_path(user, recording, file_info)
                             
+                            # Check if file already exists (resume capability)
+                            if file_path.exists() and not dry_run:
+                                file_size = file_path.stat().st_size
+                                total_size += file_size
+                                print(f"         ⏭️  Skipped (already exists): {file_path.name}")
+                                # Mark file as processed in state
+                                state.mark_file_processed(file_info.get("id", ""), "skipped")
+                                continue
+                            
                             if not dry_run:
                                 # Download the file
                                 try:
