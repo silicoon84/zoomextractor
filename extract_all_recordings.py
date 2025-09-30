@@ -173,37 +173,33 @@ def extract_all_recordings(
                         user_meetings += 1
                         
                         # Process files
-                        files = recording.get("files", [])
+                        files = recording.get("processed_files", [])
                         for file_info in files:
-                            processed_file = recordings_lister._process_recording_file(file_info)
-                            if processed_file:
-                                user_files += 1
+                            user_files += 1
+                            
+                            if not dry_run:
+                                # Download the file
+                                download_url = file_info["download_url"]
+                                file_path = structure.get_file_path(user, recording, file_info)
                                 
-                                if not dry_run:
-                                    # Download the file
-                                    download_url = processed_file["download_url"]
-                                    file_path = structure.get_file_path(user, recording, processed_file)
-                                    
-                                    try:
-                                        success = downloader.download_file(download_url, file_path)
-                                        if success:
-                                            file_size = file_info.get("file_size", 0)
-                                            total_size += file_size
-                                            print(f"         ✅ Downloaded: {file_path.name}")
-                                        else:
-                                            print(f"         ❌ Failed: {file_path.name}")
-                                    except Exception as e:
-                                        print(f"         ❌ Download error: {e}")
-                                else:
-                                    # Dry run - just count
-                                    file_size = file_info.get("file_size", 0)
-                                    total_size += file_size
-                                    print(f"         🔍 Would download: {processed_file.get('file_type', 'unknown')} ({file_size} bytes)")
-                        
-                        # Log to state (log each file individually)
-                        for file_info in files:
-                            if file_info.get("download_url"):
-                                state.log_file(user, recording, file_info, "downloaded" if not dry_run else "dry_run")
+                                try:
+                                    success = downloader.download_file(download_url, file_path)
+                                    if success:
+                                        file_size = file_info.get("file_size", 0)
+                                        total_size += file_size
+                                        print(f"         ✅ Downloaded: {file_path.name}")
+                                    else:
+                                        print(f"         ❌ Failed: {file_path.name}")
+                                except Exception as e:
+                                    print(f"         ❌ Download error: {e}")
+                            else:
+                                # Dry run - just count
+                                file_size = file_info.get("file_size", 0)
+                                total_size += file_size
+                                print(f"         🔍 Would download: {file_info.get('file_type', 'unknown')} ({file_size} bytes)")
+                            
+                            # Log file to state
+                            state.log_file(user, recording, file_info, "downloaded" if not dry_run else "dry_run")
                 
                 except Exception as e:
                     print(f"      ❌ Error processing date window: {e}")
