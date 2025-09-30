@@ -87,8 +87,10 @@ def extract_all_recordings(
             if existing_state and existing_state.get("users", {}).get("processed", 0) > 0:
                 start_from_user = existing_state["users"]["processed"]
                 print(f"🔄 RESUMING from user {start_from_user + 1}/{len(all_users)}")
-        except:
-            print("🆕 Starting fresh extraction")
+            else:
+                print("🆕 Starting fresh extraction")
+        except Exception as e:
+            print(f"🆕 Starting fresh extraction (error checking state: {e})")
     
     # Initialize components
     user_enumerator = UserEnumerator(headers)
@@ -225,6 +227,9 @@ def extract_all_recordings(
         
         # Always increment processed_users, regardless of success/failure
         processed_users += 1
+        
+        # Mark user as processed in state
+        state.mark_user_processed(user_id)
         
         # Save progress every 10 users
         if processed_users % 10 == 0:
