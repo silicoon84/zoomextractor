@@ -185,8 +185,10 @@ def extract_all_recordings(
                                     total_size += file_size
                                     print(f"         🔍 Would download: {processed_file.get('file_type', 'unknown')} ({file_size} bytes)")
                         
-                        # Log to state
-                        state.log_meeting(user, recording, files)
+                        # Log to state (log each file individually)
+                        for file_info in files:
+                            if file_info.get("download_url"):
+                                state.log_file(user, recording, file_info, "downloaded" if not dry_run else "dry_run")
                 
                 except Exception as e:
                     print(f"      ❌ Error processing date window: {e}")
@@ -251,6 +253,11 @@ def main():
         # Set default date range if not provided
         from_date = args.from_date or (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')  # 2 years ago
         to_date = args.to_date or datetime.now().strftime('%Y-%m-%d')  # Today
+        
+        # Ensure to_date is not in the future
+        today = datetime.now().strftime('%Y-%m-%d')
+        if to_date > today:
+            to_date = today
         
         result = extract_all_recordings(
             output_dir=args.output_dir,
