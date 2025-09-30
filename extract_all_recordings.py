@@ -75,7 +75,8 @@ def extract_all_recordings(
     output_path.mkdir(exist_ok=True)
     
     # Initialize state tracking
-    state = ExtractionState(output_path)
+    state_file = output_path / "_metadata" / "extraction_state.json"
+    state = ExtractionState(state_file)
     
     # Initialize components
     user_enumerator = UserEnumerator(headers)
@@ -247,11 +248,15 @@ def main():
     args = parser.parse_args()
     
     try:
+        # Set default date range if not provided
+        from_date = args.from_date or (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')  # 2 years ago
+        to_date = args.to_date or datetime.now().strftime('%Y-%m-%d')  # Today
+        
         result = extract_all_recordings(
             output_dir=args.output_dir,
             user_filter=args.user_filter,
-            from_date=args.from_date,
-            to_date=args.to_date,
+            from_date=from_date,
+            to_date=to_date,
             include_trash=args.include_trash,
             include_inactive_users=args.include_inactive,
             max_concurrent=args.max_concurrent,
