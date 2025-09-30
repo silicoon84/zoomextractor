@@ -24,7 +24,7 @@ from zoom_extractor.dates import DateWindowGenerator
 from zoom_extractor.downloader import FileDownloader
 from zoom_extractor.structure import DirectoryStructure
 from zoom_extractor.state import ExtractionState
-from zoom_extractor.edge_cases import validate_user_access, validate_meeting_access
+from zoom_extractor.edge_cases import EdgeCaseHandler
 
 def extract_all_recordings(
     output_dir: str = "./zoom_recordings_all",
@@ -82,6 +82,7 @@ def extract_all_recordings(
     recordings_lister = RecordingsLister(headers)
     date_generator = DateWindowGenerator(from_date, to_date)
     structure = DirectoryStructure(output_dir)
+    edge_handler = EdgeCaseHandler(headers)
     
     if not dry_run:
         downloader = FileDownloader(max_concurrent)
@@ -126,7 +127,7 @@ def extract_all_recordings(
         
         try:
             # Validate user access
-            user_warnings = validate_user_access(user)
+            user_warnings = edge_handler.check_account_restrictions(user)
             if user_warnings:
                 print(f"   ⚠️  User warnings: {user_warnings}")
             
@@ -149,7 +150,7 @@ def extract_all_recordings(
                         print(f"      📹 Meeting: {meeting_topic}")
                         
                         # Validate meeting access
-                        meeting_warnings = validate_meeting_access(recording)
+                        meeting_warnings = edge_handler.handle_meeting_type_restrictions(recording)
                         if meeting_warnings:
                             print(f"         ⚠️  Meeting warnings: {meeting_warnings}")
                         
