@@ -135,7 +135,7 @@ def extract_all_recordings(
             user_files = 0
             
             # Process each date window
-            for start_date, end_date in date_generator.generate_windows():
+            for start_date, end_date in date_generator.generate_monthly_windows():
                 print(f"   📅 Processing {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
                 
                 try:
@@ -194,16 +194,17 @@ def extract_all_recordings(
             print(f"   📊 User summary: {user_meetings} meetings, {user_files} files")
             total_meetings += user_meetings
             total_files += user_files
-            processed_users += 1
             
-            # Save progress every 10 users
-            if processed_users % 10 == 0:
-                state.save_state()
-                print(f"   💾 Progress saved ({processed_users}/{len(all_users)} users processed)")
-        
         except Exception as e:
             print(f"   ❌ Error processing user {user_email}: {e}")
-            continue
+        
+        # Always increment processed_users, regardless of success/failure
+        processed_users += 1
+        
+        # Save progress every 10 users
+        if processed_users % 10 == 0:
+            state._save_state()
+            print(f"   💾 Progress saved ({processed_users}/{len(all_users)} users processed)")
     
     # Final summary
     print(f"\n🎉 EXTRACTION COMPLETE")
@@ -218,7 +219,7 @@ def extract_all_recordings(
         print(f"💡 Run without --dry-run to perform actual downloads")
     
     # Save final state
-    state.save_state()
+    state._save_state()
     
     return {
         "users_processed": processed_users,
