@@ -133,7 +133,7 @@ def detailed_dry_run(
         user_has_recordings = False
         
         # Process each date window
-        for start_date, end_date in date_generator.generate_windows():
+        for start_date, end_date in date_generator.generate_monthly_windows():
             try:
                 recordings = list(recordings_lister.list_user_recordings(
                     user_id, start_date, end_date, include_trash=include_trash
