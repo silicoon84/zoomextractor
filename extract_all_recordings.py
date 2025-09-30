@@ -191,26 +191,26 @@ def extract_all_recordings(
                                         total_size += file_size
                                         print(f"         ✅ Downloaded: {file_path.name}")
                                         
-                                        # Log successful download to state
-                                        state.log_file(user, recording, file_info, file_path, (success, stats))
+                                        # Mark file as processed in state
+                                        state.mark_file_processed(file_info.get("id", ""), "downloaded")
                                     else:
                                         print(f"         ❌ Failed: {file_path.name}")
                                         
-                                        # Log failed download to state
-                                        state.log_file(user, recording, file_info, file_path, (success, stats), "Download failed")
+                                        # Mark file as failed in state
+                                        state.mark_file_processed(file_info.get("id", ""), "failed")
                                 except Exception as e:
                                     print(f"         ❌ Download error: {e}")
                                     
-                                    # Log error to state
-                                    state.log_file(user, recording, file_info, file_path, (False, {}), str(e))
+                                    # Mark file as error in state
+                                    state.mark_file_processed(file_info.get("id", ""), "error")
                             else:
                                 # Dry run - just count
                                 file_size = file_info.get("file_size", 0)
                                 total_size += file_size
                                 print(f"         🔍 Would download: {file_info.get('file_type', 'unknown')} ({file_size} bytes)")
                                 
-                                # Log dry run to state
-                                state.log_file(user, recording, file_info, file_path, (True, {"file_size": file_size}), "Dry run")
+                                # Mark file as dry run in state
+                                state.mark_file_processed(file_info.get("id", ""), "dry_run")
                 
                 except Exception as e:
                     print(f"      ❌ Error processing date window: {e}")
