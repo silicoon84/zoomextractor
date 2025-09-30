@@ -79,19 +79,6 @@ def extract_all_recordings(
     state_file = output_path / "_metadata" / "extraction_state.json"
     state = ExtractionState(state_file)
     
-    # Check for resume capability
-    start_from_user = 0
-    if resume:
-        try:
-            existing_state = state.get_progress_summary()
-            if existing_state and existing_state.get("users", {}).get("processed", 0) > 0:
-                start_from_user = existing_state["users"]["processed"]
-                print(f"🔄 RESUMING from user {start_from_user + 1}/{len(all_users)}")
-            else:
-                print("🆕 Starting fresh extraction")
-        except Exception as e:
-            print(f"🆕 Starting fresh extraction (error checking state: {e})")
-    
     # Initialize components
     user_enumerator = UserEnumerator(headers)
     recordings_lister = RecordingsLister(headers)
@@ -126,6 +113,19 @@ def extract_all_recordings(
     if not all_users:
         print("❌ No users found to process")
         return {"error": "No users found"}
+    
+    # Check for resume capability (after users are loaded)
+    start_from_user = 0
+    if resume:
+        try:
+            existing_state = state.get_progress_summary()
+            if existing_state and existing_state.get("users", {}).get("processed", 0) > 0:
+                start_from_user = existing_state["users"]["processed"]
+                print(f"🔄 RESUMING from user {start_from_user + 1}/{len(all_users)}")
+            else:
+                print("🆕 Starting fresh extraction")
+        except Exception as e:
+            print(f"🆕 Starting fresh extraction (error checking state: {e})")
     
     # Process all users
     total_meetings = 0
