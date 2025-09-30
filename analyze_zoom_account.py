@@ -51,7 +51,10 @@ def analyze_account():
         print("\n👥 USER ANALYSIS")
         print("-" * 30)
         
-        users = list(user_enumerator.list_all_users())
+        # Get all users (active + inactive for comprehensive coverage)
+        active_users = list(user_enumerator.list_all_users(user_type="active"))
+        inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+        users = active_users + inactive_users
         print(f"Total Active Users: {len(users)}")
         
         # User type breakdown
@@ -112,7 +115,7 @@ def analyze_account():
                 for start_date, end_date in date_generator.generate_monthly_windows():
                     try:
                         meetings = list(recordings_lister.list_user_recordings(
-                            user_id, start_date, end_date
+                            user_id, start_date, end_date, include_trash=True
                         ))
                         
                         for meeting in meetings:
@@ -214,7 +217,10 @@ def quick_sample():
         recordings_lister = RecordingsLister(headers)
         
         # Get 5 users
-        users = list(user_enumerator.list_all_users())[:5]
+        # Get all users (active + inactive for comprehensive coverage)
+        active_users = list(user_enumerator.list_all_users(user_type="active"))
+        inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+        users = active_users + inactive_users[:5]
         
         # Last 30 days
         end_date = datetime.utcnow()

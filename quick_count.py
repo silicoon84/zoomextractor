@@ -30,8 +30,11 @@ def count_recordings():
         
         # Get all users
         print("📋 Getting users...")
-        users = list(user_enumerator.list_all_users())
-        print(f"✅ Found {len(users)} users")
+        # Get all users (active + inactive for comprehensive coverage)
+        active_users = list(user_enumerator.list_all_users(user_type="active"))
+        inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+        users = active_users + inactive_users
+        print(f"✅ Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
         
         # Analyze different time periods
         time_periods = [
@@ -75,7 +78,7 @@ def count_recordings():
                 try:
                     for start_date, end_date in date_gen.generate_monthly_windows():
                         meetings = list(recordings_lister.list_user_recordings(
-                            user_id, start_date, end_date
+                            user_id, start_date, end_date, include_trash=True
                         ))
                         
                         for meeting in meetings:

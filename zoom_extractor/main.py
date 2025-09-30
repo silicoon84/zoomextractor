@@ -69,7 +69,7 @@ class ZoomExtractor:
     
     def __init__(self, output_dir: str, user_filter: Optional[List[str]] = None,
                  from_date: Optional[str] = None, to_date: Optional[str] = None,
-                 max_concurrent: int = 2, include_trash: bool = False,
+                 max_concurrent: int = 2, include_trash: bool = True,
                  dry_run: bool = False):
         """
         Initialize Zoom extractor.
@@ -118,9 +118,12 @@ class ZoomExtractor:
         self.logger.info("Starting Zoom recordings extraction")
         
         try:
-            # Get all users (start with active users only)
-            users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="active"))
-            self.logger.info(f"Found {len(users)} users to process")
+            # Get all users (active + inactive for comprehensive coverage)
+            active_users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="active"))
+            inactive_users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="inactive"))
+            
+            users = active_users + inactive_users
+            self.logger.info(f"Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
             
             if not users:
                 self.logger.warning("No users found to process")

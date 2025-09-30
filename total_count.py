@@ -83,12 +83,14 @@ def total_count():
         user_enumerator = UserEnumerator(headers)
         recordings_lister = RecordingsLister(headers)
         
-        # Get all users
+        # Get all users (active + inactive for comprehensive coverage)
         logger.info("📋 Getting users...")
         print("📋 Getting users...")
-        users = list(user_enumerator.list_all_users())
-        logger.info(f"✅ Found {len(users)} total users")
-        print(f"✅ Found {len(users)} total users")
+        active_users = list(user_enumerator.list_all_users(user_type="active"))
+        inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+        users = active_users + inactive_users
+        logger.info(f"✅ Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
+        print(f"✅ Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
         
         # Set up date range for all time (2020-2025 to cover everything)
         date_generator = DateWindowGenerator('2020-01-01', '2025-12-31')
@@ -170,7 +172,7 @@ def total_count():
                             
                             for start_date, end_date in date_generator.generate_monthly_windows():
                                 meetings = list(recordings_lister.list_user_recordings(
-                                    user_id, start_date, end_date
+                                    user_id, start_date, end_date, include_trash=True
                                 ))
                                 
                                 for meeting in meetings:
