@@ -83,14 +83,15 @@ def total_count():
         user_enumerator = UserEnumerator(headers)
         recordings_lister = RecordingsLister(headers)
         
-        # Get all users (active + inactive for comprehensive coverage)
+        # Get all users (active + inactive + pending for comprehensive coverage)
         logger.info("📋 Getting users...")
         print("📋 Getting users...")
         active_users = list(user_enumerator.list_all_users(user_type="active"))
         inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
-        users = active_users + inactive_users
-        logger.info(f"✅ Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
-        print(f"✅ Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
+        pending_users = list(user_enumerator.list_all_users(user_type="pending"))
+        users = active_users + inactive_users + pending_users
+        logger.info(f"✅ Found {len(active_users)} active, {len(inactive_users)} inactive, and {len(pending_users)} pending users ({len(users)} total)")
+        print(f"✅ Found {len(active_users)} active, {len(inactive_users)} inactive, and {len(pending_users)} pending users ({len(users)} total)")
         
         # Set up date range for all time (2020-2025 to cover everything)
         date_generator = DateWindowGenerator('2020-01-01', '2025-12-31')

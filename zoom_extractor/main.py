@@ -118,12 +118,13 @@ class ZoomExtractor:
         self.logger.info("Starting Zoom recordings extraction")
         
         try:
-            # Get all users (active + inactive for comprehensive coverage)
+            # Get all users (active + inactive + pending for comprehensive coverage)
             active_users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="active"))
             inactive_users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="inactive"))
+            pending_users = list(self.user_enumerator.list_all_users(self.user_filter, user_type="pending"))
             
-            users = active_users + inactive_users
-            self.logger.info(f"Found {len(active_users)} active users and {len(inactive_users)} inactive users ({len(users)} total)")
+            users = active_users + inactive_users + pending_users
+            self.logger.info(f"Found {len(active_users)} active, {len(inactive_users)} inactive, and {len(pending_users)} pending users ({len(users)} total)")
             
             if not users:
                 self.logger.warning("No users found to process")

@@ -73,17 +73,19 @@ def detailed_dry_run(
     print("📋 Getting users...")
     active_users = list(user_enumerator.list_all_users(user_filter, user_type="active"))
     inactive_users = []
+    pending_users = []
     
     if include_inactive_users:
         inactive_users = list(user_enumerator.list_all_users(user_filter, user_type="inactive"))
+        pending_users = list(user_enumerator.list_all_users(user_filter, user_type="pending"))
     
-    all_users = active_users + inactive_users
+    all_users = active_users + inactive_users + pending_users
     
     if max_sample_users and len(all_users) > max_sample_users:
         print(f"📊 Sampling {max_sample_users} users out of {len(all_users)} total")
         all_users = all_users[:max_sample_users]
     
-    print(f"✅ Found {len(active_users)} active users and {len(inactive_users)} inactive users")
+    print(f"✅ Found {len(active_users)} active, {len(inactive_users)} inactive, and {len(pending_users)} pending users")
     print(f"🎯 Processing {len(all_users)} users for detailed analysis")
     
     # Detailed tracking
