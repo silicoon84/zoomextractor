@@ -98,7 +98,7 @@ def extract_all_recordings(
     edge_handler = EdgeCaseHandler(headers)
     
     if not dry_run:
-        downloader = FileDownloader(max_concurrent)
+        downloader = FileDownloader(headers, max_concurrent)
     
     # Get all users (active + inactive if requested)
     all_users = []
