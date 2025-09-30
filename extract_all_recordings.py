@@ -34,7 +34,8 @@ def extract_all_recordings(
     include_trash: bool = True,
     include_inactive_users: bool = True,
     max_concurrent: int = 2,
-    dry_run: bool = True
+    dry_run: bool = True,
+    resume: bool = True
 ):
     """
     Extract recordings from ALL users including inactive/deleted ones.
@@ -78,6 +79,17 @@ def extract_all_recordings(
     state_file = output_path / "_metadata" / "extraction_state.json"
     state = ExtractionState(state_file)
     
+    # Check for resume capability
+    start_from_user = 0
+    if resume:
+        try:
+            existing_state = state.get_progress_summary()
+            if existing_state and existing_state.get("users", {}).get("processed", 0) > 0:
+                start_from_user = existing_state["users"]["processed"]
+                print(f"🔄 RESUMING from user {start_from_user + 1}/{len(all_users)}")
+        except:
+            print("🆕 Starting fresh extraction")
+    
     # Initialize components
     user_enumerator = UserEnumerator(headers)
     recordings_lister = RecordingsLister(headers)
@@ -119,7 +131,10 @@ def extract_all_recordings(
     total_size = 0
     processed_users = 0
     
-    for user_idx, user in enumerate(all_users, 1):
+    # Start from the resume point if applicable
+    users_to_process = all_users[start_from_user:] if start_from_user > 0 else all_users
+    
+    for user_idx, user in enumerate(users_to_process, start_from_user + 1):
         user_id = user["id"]
         user_email = user.get("email", "unknown")
         user_status = user.get("status", "unknown")
@@ -246,6 +261,8 @@ def main():
     parser.add_argument("--include-inactive", action="store_true", default=True, help="Include inactive users")
     parser.add_argument("--max-concurrent", type=int, default=2, help="Max concurrent downloads")
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
+    parser.add_argument("--resume", action="store_true", default=True, help="Resume from previous state (default: True)")
+    parser.add_argument("--no-resume", action="store_true", help="Don't resume, start fresh")
     
     args = parser.parse_args()
     
@@ -259,6 +276,9 @@ def main():
         if to_date > today:
             to_date = today
         
+        # Determine resume setting
+        resume_enabled = args.resume and not args.no_resume
+        
         result = extract_all_recordings(
             output_dir=args.output_dir,
             user_filter=args.user_filter,
@@ -267,7 +287,8 @@ def main():
             include_trash=args.include_trash,
             include_inactive_users=args.include_inactive,
             max_concurrent=args.max_concurrent,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            resume=resume_enabled
         )
         
         if "error" in result:
