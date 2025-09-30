@@ -54,10 +54,10 @@ def analyze_user_coverage():
             user_id = user["id"]
             user_email = user.get("email", "unknown")
             
-            try:
-                # Check last 90 days for recordings
-                end_date = datetime.now()
-                start_date = end_date - timedelta(days=90)
+                try:
+                    # Check last 2 years for recordings (more comprehensive)
+                    end_date = datetime.now()
+                    start_date = end_date - timedelta(days=730)
                 
                 recordings = list(recordings_lister.list_user_recordings(
                     user_id, start_date, end_date
@@ -242,7 +242,10 @@ def main():
                 print(f"  - Total users: {stats['total_users']}")
                 print(f"  - Users with recordings: {stats['users_with_recordings']}")
                 print(f"  - Total recordings (sample): {stats['total_recordings']}")
-                print(f"  - Total files (sample): {stats['total_files']}")
+                if 'total_files' in stats:
+                    print(f"  - Total files (sample): {stats['total_files']}")
+                else:
+                    print(f"  - Total files (sample): 0")
         
         print(f"\n🔍 POTENTIAL GAPS:")
         print("1. INACTIVE/DELETED USERS: May have recordings not counted")
