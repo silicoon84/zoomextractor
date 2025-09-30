@@ -20,7 +20,7 @@ from zoom_extractor.auth import get_auth_from_env
 from zoom_extractor.users import UserEnumerator
 from zoom_extractor.recordings import RecordingsLister
 from zoom_extractor.dates import DateWindowGenerator
-from zoom_extractor.structure import get_output_path, sanitize_filename
+from zoom_extractor.structure import DirectoryStructure
 
 def detailed_dry_run(
     output_dir: str = "./zoom_recordings",
@@ -59,6 +59,7 @@ def detailed_dry_run(
     
     user_enumerator = UserEnumerator(headers)
     recordings_lister = RecordingsLister(headers)
+    structure = DirectoryStructure(output_dir)
     
     # Set default date range if not provided
     if not from_date:
@@ -179,9 +180,7 @@ def detailed_dry_run(
                             meeting_data["total_size_bytes"] += file_size
                             
                             # Generate output path
-                            output_path = get_output_path(
-                                Path(output_dir), user, recording, file_info
-                            )
+                            output_path = structure.get_file_path(user, recording, file_info)
                             
                             file_data = {
                                 "user_email": user_email,
