@@ -133,11 +133,18 @@ class ChatExtractionTester:
                 logger.warning(f"⚠️ Pending users test failed: {e}")
                 pending_users = []
             
+            # Calculate total users across all types
+            total_users = len(active_users) + len(inactive_users) + len(pending_users)
+            logger.info(f"📊 Total users across all types: {total_users}")
+            
             return {
                 "active_users": len(active_users),
                 "inactive_users": len(inactive_users),
                 "pending_users": len(pending_users),
-                "sample_user": active_users[0] if active_users else None
+                "total_users": total_users,
+                "sample_active_user": active_users[0] if active_users else None,
+                "sample_inactive_user": inactive_users[0] if inactive_users else None,
+                "sample_pending_user": pending_users[0] if pending_users else None
             }
             
         except Exception as e:

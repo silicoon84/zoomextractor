@@ -462,7 +462,7 @@ def extract_all_chat_messages(
     user_filter: Optional[List[str]] = None,
     from_date: str = "2020-01-01",
     to_date: Optional[str] = None,
-    include_inactive: bool = True,
+    include_inactive_users: bool = True,
     include_meeting_chats: bool = True,
     dry_run: bool = False
 ):
@@ -490,29 +490,70 @@ def extract_all_chat_messages(
     # Get users to process
     user_enumerator = UserEnumerator(auth_headers)
     
+    # Get all users (active + inactive if requested)
+    all_users = []
+    
     if user_filter:
         logger.info(f"👥 Processing filtered users: {user_filter}")
-        all_users = []
-        for user_email in user_filter:
-            # Find user by email
-            users = list(user_enumerator.list_all_users(user_type="active"))
-            user = next((u for u in users if u.get("email") == user_email), None)
-            if user:
-                all_users.append(user)
-            else:
-                logger.warning(f"⚠️ User {user_email} not found in active users")
-                
-            if include_inactive:
-                inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
-                user = next((u for u in inactive_users if u.get("email") == user_email), None)
-                if user:
-                    all_users.append(user)
+        
+        # Get active users
+        print("📋 Getting active users...")
+        try:
+            active_users = list(user_enumerator.list_all_users(user_filter, user_type="active"))
+            all_users.extend(active_users)
+            print(f"   Found {len(active_users)} active users")
+        except Exception as e:
+            print(f"   ⚠️  Could not get active users: {e}")
+        
+        # Get inactive users if requested
+        if include_inactive_users:
+            print("📋 Getting inactive users...")
+            try:
+                inactive_users = list(user_enumerator.list_all_users(user_filter, user_type="inactive"))
+                all_users.extend(inactive_users)
+                print(f"   Found {len(inactive_users)} inactive users")
+            except Exception as e:
+                print(f"   ⚠️  Could not get inactive users: {e}")
+        
+        # Get pending users if requested
+        print("📋 Getting pending users...")
+        try:
+            pending_users = list(user_enumerator.list_all_users(user_filter, user_type="pending"))
+            all_users.extend(pending_users)
+            print(f"   Found {len(pending_users)} pending users")
+        except Exception as e:
+            print(f"   ⚠️  Could not get pending users: {e}")
+            
     else:
         logger.info("👥 Processing all users")
-        all_users = list(user_enumerator.list_all_users(user_type="active"))
-        if include_inactive:
-            inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
-            all_users.extend(inactive_users)
+        
+        # Get active users
+        print("📋 Getting active users...")
+        try:
+            active_users = list(user_enumerator.list_all_users(user_type="active"))
+            all_users.extend(active_users)
+            print(f"   Found {len(active_users)} active users")
+        except Exception as e:
+            print(f"   ⚠️  Could not get active users: {e}")
+        
+        # Get inactive users if requested
+        if include_inactive_users:
+            print("📋 Getting inactive users...")
+            try:
+                inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+                all_users.extend(inactive_users)
+                print(f"   Found {len(inactive_users)} inactive users")
+            except Exception as e:
+                print(f"   ⚠️  Could not get inactive users: {e}")
+        
+        # Get pending users if requested
+        print("📋 Getting pending users...")
+        try:
+            pending_users = list(user_enumerator.list_all_users(user_type="pending"))
+            all_users.extend(pending_users)
+            print(f"   Found {len(pending_users)} pending users")
+        except Exception as e:
+            print(f"   ⚠️  Could not get pending users: {e}")
     
     logger.info(f"🎯 Found {len(all_users)} users to process")
     
@@ -660,7 +701,7 @@ Examples:
             user_filter=args.user_filter,
             from_date=args.from_date,
             to_date=args.to_date,
-            include_inactive=args.include_inactive,
+            include_inactive_users=args.include_inactive,
             include_meeting_chats=args.include_meeting_chats,
             dry_run=args.dry_run
         )
