@@ -26,6 +26,10 @@ from typing import Dict, List, Optional
 
 import requests
 from tqdm import tqdm
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import our modules
 from zoom_extractor.auth import get_auth_from_env
