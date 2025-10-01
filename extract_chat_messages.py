@@ -126,7 +126,7 @@ class ChatMessageExtractor:
                 if next_page_token:
                     params["next_page_token"] = next_page_token
                 
-                self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
                 response = requests.get(url, headers=self.auth_headers, params=params)
                 
                 if response.status_code == 200:
@@ -207,7 +207,7 @@ class ChatMessageExtractor:
                 if next_page_token:
                     params["next_page_token"] = next_page_token
                 
-                self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
                 response = requests.get(url, headers=self.auth_headers, params=params)
                 
                 if response.status_code == 200:
@@ -280,7 +280,7 @@ class ChatMessageExtractor:
                 if next_page_token:
                     params["next_page_token"] = next_page_token
                 
-                self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
                 response = requests.get(url, headers=self.auth_headers, params=params)
                 
                 if response.status_code == 200:
@@ -338,7 +338,7 @@ class ChatMessageExtractor:
                 if next_page_token:
                     params["next_page_token"] = next_page_token
                 
-                self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
                 response = requests.get(recordings_url, headers=self.auth_headers, params=params)
                 
                 if response.status_code == 200:
@@ -477,7 +477,8 @@ def extract_all_chat_messages(
     
     # Initialize authentication
     try:
-        auth_headers = get_auth_from_env()
+        auth = get_auth_from_env()
+        auth_headers = auth.get_auth_headers()
         logger.info("✅ Authentication successful")
     except Exception as e:
         logger.error(f"❌ Authentication failed: {e}")
@@ -494,7 +495,7 @@ def extract_all_chat_messages(
         all_users = []
         for user_email in user_filter:
             # Find user by email
-            users = user_enumerator.list_all_users(status="active")
+            users = list(user_enumerator.list_all_users(user_type="active"))
             user = next((u for u in users if u.get("email") == user_email), None)
             if user:
                 all_users.append(user)
@@ -502,15 +503,15 @@ def extract_all_chat_messages(
                 logger.warning(f"⚠️ User {user_email} not found in active users")
                 
             if include_inactive:
-                inactive_users = user_enumerator.list_all_users(status="inactive")
+                inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
                 user = next((u for u in inactive_users if u.get("email") == user_email), None)
                 if user:
                     all_users.append(user)
     else:
         logger.info("👥 Processing all users")
-        all_users = user_enumerator.list_all_users(status="active")
+        all_users = list(user_enumerator.list_all_users(user_type="active"))
         if include_inactive:
-            inactive_users = user_enumerator.list_all_users(status="inactive")
+            inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
             all_users.extend(inactive_users)
     
     logger.info(f"🎯 Found {len(all_users)} users to process")

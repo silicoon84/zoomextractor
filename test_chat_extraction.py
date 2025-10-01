@@ -91,7 +91,8 @@ class ChatExtractionTester:
         logger.info("🔐 Testing authentication...")
         
         try:
-            self.auth_headers = get_auth_from_env()
+            auth = get_auth_from_env()
+            self.auth_headers = auth.get_auth_headers()
             
             # Test a simple API call
             test_url = "https://api.zoom.us/v2/users/me"
@@ -117,16 +118,16 @@ class ChatExtractionTester:
             user_enumerator = UserEnumerator(self.auth_headers)
             
             # Test active users
-            active_users = user_enumerator.list_all_users(status="active")
+            active_users = list(user_enumerator.list_all_users(user_type="active"))
             logger.info(f"✅ Found {len(active_users)} active users")
             
             # Test inactive users
-            inactive_users = user_enumerator.list_all_users(status="inactive")
+            inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
             logger.info(f"✅ Found {len(inactive_users)} inactive users")
             
             # Test pending users
             try:
-                pending_users = user_enumerator.list_all_users(status="pending")
+                pending_users = list(user_enumerator.list_all_users(user_type="pending"))
                 logger.info(f"✅ Found {len(pending_users)} pending users")
             except Exception as e:
                 logger.warning(f"⚠️ Pending users test failed: {e}")
@@ -238,12 +239,12 @@ class ChatExtractionTester:
         try:
             # Find the user
             user_enumerator = UserEnumerator(self.auth_headers)
-            users = user_enumerator.list_all_users(status="active")
+            users = list(user_enumerator.list_all_users(user_type="active"))
             user = next((u for u in users if u.get("email") == user_email), None)
             
             if not user:
                 # Try inactive users
-                inactive_users = user_enumerator.list_all_users(status="inactive")
+                inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
                 user = next((u for u in inactive_users if u.get("email") == user_email), None)
             
             if not user:
