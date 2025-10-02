@@ -51,6 +51,34 @@ class DMExtractor:
         
         logger.info(f"DM extraction output: {self.output_dir}")
     
+    def test_messages_endpoint(self, user_id: str) -> Dict:
+        """Test the messages endpoint without filters to see what we get"""
+        try:
+            logger.info(f"Testing messages endpoint for user: {user_id}")
+            
+            url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
+            params = {"page_size": 5}  # Just get a few messages to test
+            
+            response = requests.get(url, headers=self.auth_headers, params=params)
+            
+            logger.info(f"Test API Response Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                messages = data.get("messages", [])
+                logger.info(f"Test API returned {len(messages)} messages")
+                logger.info(f"Test API response keys: {list(data.keys())}")
+                if messages:
+                    logger.info(f"Sample message: {messages[0]}")
+                return {"status": "success", "message_count": len(messages), "data": data}
+            else:
+                logger.error(f"Test API failed: {response.status_code} - {response.text}")
+                return {"status": "error", "status_code": response.status_code, "response": response.text}
+                
+        except Exception as e:
+            logger.error(f"Test API exception: {e}")
+            return {"status": "exception", "error": str(e)}
+    
     def get_messages(self, user_id: str, to_contact: str, from_date: str, to_date: str, 
                     include_files: bool = True) -> List[Dict]:
         """Get direct messages between user and contact"""
@@ -95,6 +123,10 @@ class DMExtractor:
                     logger.info(f"API returned {len(page_messages)} messages on this page")
                     if page_messages:
                         logger.info(f"Sample message structure: {list(page_messages[0].keys()) if page_messages[0] else 'Empty message'}")
+                    else:
+                        # Log the full response when no messages are found
+                        logger.warning(f"Full API response for debugging: {data}")
+                        logger.warning(f"Response keys: {list(data.keys()) if data else 'No data'}")
                     
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
@@ -309,6 +341,12 @@ class DMExtractor:
             
             logger.info(f"[{i}/{len(all_users)}] Processing user: {user_email} ({user_id})")
             logger.info(f"  📅 Date range: {from_date} to {to_date}")
+            
+            # Test the messages endpoint for the first user to debug
+            if i == 1:
+                logger.info("  🔍 Testing messages endpoint without filters...")
+                test_result = self.test_messages_endpoint(user_id)
+                logger.info(f"  Test result: {test_result}")
             
             try:
                 # Extract DMs for this user
