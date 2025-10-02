@@ -312,8 +312,8 @@ class ImprovedChatExtractor:
             logger.error(f"Error downloading file: {e}")
             return None
     
-    def extract_channel_messages(self, channel_id: str, channel_name: str, days: int = 30, 
-                               download_files: bool = True, extractor_user: str = "me") -> Dict[str, Any]:
+    def extract_channel_messages(self, channel_id: str, channel_name: str, channel_info: Dict = None, 
+                               days: int = 30, download_files: bool = True, extractor_user: str = "me") -> Dict[str, Any]:
         """Extract messages from a specific channel using a single user"""
         
         # Calculate date range
@@ -323,14 +323,38 @@ class ImprovedChatExtractor:
         logger.info(f"Extracting messages from channel '{channel_name}' ({channel_id})")
         logger.info(f"Date range: {from_date} to {to_date}")
         
-        # Get messages using the extractor user
-        messages = self.get_messages(
-            user_id=extractor_user,
-            to_channel=channel_id,
-            from_date=from_date,
-            to_date=to_date,
-            include_files=download_files
-        )
+        # Determine if this is a DM channel or group channel
+        channel_type = channel_info.get("type", "group") if channel_info else "group"
+        is_dm_channel = channel_type == "1:1" or "," in channel_name  # DMs often have comma-separated names
+        
+        messages = []
+        
+        if is_dm_channel:
+            logger.info(f"Detected DM channel, extracting from accessible users")
+            # For DM channels, we need to extract from each user's perspective
+            accessible_users = channel_info.get("accessible_by_users", []) if channel_info else []
+            
+            for user_email in accessible_users:
+                if user_email != extractor_user:  # Don't extract with self
+                    logger.info(f"Extracting DM with contact: {user_email}")
+                    user_messages = self.get_messages(
+                        user_id=extractor_user,
+                        to_contact=user_email,
+                        from_date=from_date,
+                        to_date=to_date,
+                        include_files=download_files
+                    )
+                    messages.extend(user_messages)
+        else:
+            logger.info(f"Detected group channel, extracting channel messages")
+            # For group channels, use to_channel parameter
+            messages = self.get_messages(
+                user_id=extractor_user,
+                to_channel=channel_id,
+                from_date=from_date,
+                to_date=to_date,
+                include_files=download_files
+            )
         
         # Download files if requested
         downloaded_files = []
@@ -392,13 +416,15 @@ class ImprovedChatExtractor:
             channel_name = channel.get("name", "Unknown")
             accessible_users = channel.get("accessible_by_users", [])
             
+            channel_type = channel.get("type", "unknown")
             logger.info(f"[{i}/{len(unique_channels)}] Processing channel: {channel_name}")
-            logger.info(f"  Accessible by {len(accessible_users)} users")
+            logger.info(f"  Type: {channel_type}, Accessible by {len(accessible_users)} users")
             
             try:
                 result = self.extract_channel_messages(
                     channel_id=channel_id,
                     channel_name=channel_name,
+                    channel_info=channel,
                     days=days,
                     download_files=download_files,
                     extractor_user=extractor_user
