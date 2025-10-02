@@ -155,45 +155,66 @@ class ChatMessageExtractor:
         return user_results
     
     def _extract_one_on_one_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract one-on-one chat messages using GET /chat/users/{userId}/messages"""
+        """Extract one-on-one chat messages using GET /chat/users/{userId}/messages with contacts"""
         messages = []
         
         try:
             logger.info(f"💬 Extracting one-on-one messages for user {user_id}")
             
-            url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
-            params = {
-                "from": from_date,
-                "to": to_date,
-                "page_size": 50
-            }
+            # First, get user's contacts
+            contacts = self._get_user_contacts_official(user_id)
             
-            next_page_token = None
+            if not contacts:
+                logger.warning(f"📭 No contacts found for user {user_id}")
+                return messages
             
-            while True:
-                if next_page_token:
-                    params["next_page_token"] = next_page_token
-                
-                self.rate_limiter.sleep(0)
-                response = requests.get(url, headers=self.auth_headers, params=params)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    page_messages = data.get("messages", [])
-                    messages.extend(page_messages)
+            logger.info(f"📋 Found {len(contacts)} contacts, checking for messages...")
+            
+            # Extract messages with each contact
+            for contact in contacts:
+                contact_id = contact.get("identifier") or contact.get("id") or contact.get("email")
+                if not contact_id:
+                    continue
                     
-                    logger.info(f"📥 Retrieved {len(page_messages)} messages from API")
+                logger.debug(f"🔍 Checking messages with contact: {contact_id}")
+                
+                url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
+                params = {
+                    "to_contact": contact_id,  # Required parameter according to API spec
+                    "from": from_date,
+                    "to": to_date,
+                    "page_size": 50
+                }
+                
+                next_page_token = None
+                contact_messages = []
+                
+                while True:
+                    if next_page_token:
+                        params["next_page_token"] = next_page_token
                     
-                    next_page_token = data.get("next_page_token")
-                    if not next_page_token:
-                        break
+                    self.rate_limiter.sleep(0)
+                    response = requests.get(url, headers=self.auth_headers, params=params)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        page_messages = data.get("messages", [])
+                        contact_messages.extend(page_messages)
                         
-                elif response.status_code == 404:
-                    logger.info(f"📭 No messages found for user {user_id}")
-                    break
-                else:
-                    logger.error(f"❌ Failed to fetch messages: {response.status_code} - {response.text}")
-                    break
+                        next_page_token = data.get("next_page_token")
+                        if not next_page_token:
+                            break
+                            
+                    elif response.status_code == 404:
+                        logger.debug(f"📭 No messages found with contact {contact_id}")
+                        break
+                    else:
+                        logger.warning(f"⚠️ Failed to fetch messages with contact {contact_id}: {response.status_code}")
+                        break
+                
+                if contact_messages:
+                    logger.info(f"💬 Found {len(contact_messages)} messages with contact: {contact_id}")
+                    messages.extend(contact_messages)
                     
         except Exception as e:
             logger.error(f"❌ Error extracting one-on-one messages: {e}")
@@ -240,6 +261,52 @@ class ChatMessageExtractor:
         except Exception as e:
             logger.error(f"Error in contact discovery for user {user_id}: {e}")
         
+        return contacts
+    
+    def _get_user_contacts_official(self, user_id: str) -> List[Dict]:
+        """Get user's contacts using the official GET /chat/users/me/contacts endpoint"""
+        contacts = []
+        
+        try:
+            logger.info(f"📋 Getting contacts for user {user_id}")
+            
+            # Use the official contacts endpoint
+            url = "https://api.zoom.us/v2/chat/users/me/contacts"
+            params = {
+                "page_size": 50
+            }
+            
+            next_page_token = None
+            
+            while True:
+                if next_page_token:
+                    params["next_page_token"] = next_page_token
+                
+                self.rate_limiter.sleep(0)
+                response = requests.get(url, headers=self.auth_headers, params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    page_contacts = data.get("contacts", [])
+                    contacts.extend(page_contacts)
+                    
+                    logger.info(f"📥 Retrieved {len(page_contacts)} contacts from API")
+                    
+                    next_page_token = data.get("next_page_token")
+                    if not next_page_token:
+                        break
+                        
+                elif response.status_code == 404:
+                    logger.info(f"📭 No contacts found for user {user_id}")
+                    break
+                else:
+                    logger.error(f"❌ Failed to fetch contacts: {response.status_code} - {response.text}")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"❌ Error getting contacts: {e}")
+        
+        logger.info(f"✅ Found {len(contacts)} total contacts")
         return contacts
     
     def _extract_messages_with_contact(self, user_id: str, contact: Dict, from_date: str, to_date: str) -> List[Dict]:
