@@ -59,6 +59,7 @@ class ChatMessageExtractor:
         (self.output_dir / "one_on_one").mkdir(exist_ok=True)
         (self.output_dir / "group_chats").mkdir(exist_ok=True)
         (self.output_dir / "channels").mkdir(exist_ok=True)
+        (self.output_dir / "spaces").mkdir(exist_ok=True)
         (self.output_dir / "meeting_chats").mkdir(exist_ok=True)
         (self.output_dir / "_metadata").mkdir(exist_ok=True)
         
@@ -75,6 +76,7 @@ class ChatMessageExtractor:
             "one_on_one_messages": [],
             "group_messages": [],
             "channel_messages": [],
+            "space_messages": [],
             "meeting_chat_messages": [],
             "total_messages": 0,
             "extraction_date": datetime.now().isoformat(),
@@ -94,7 +96,17 @@ class ChatMessageExtractor:
             meeting_chats = self.extract_meeting_chat_messages(user_id, user_email, from_date, to_date)
             user_results["meeting_chat_messages"] = meeting_chats
             
-            # Try group and channel messages (may not work due to API limitations)
+            # Try one-on-one messages using correct API endpoint
+            try:
+                one_on_one_messages = self._extract_one_on_one_messages(user_id, from_date, to_date)
+                user_results["one_on_one_messages"] = one_on_one_messages
+                logger.info(f"✅ Extracted {len(one_on_one_messages)} one-on-one messages")
+            except Exception as e:
+                logger.warning(f"⚠️ One-on-one message extraction failed: {e}")
+                user_results["limitations"].append(f"One-on-one messages: {str(e)}")
+                user_results["one_on_one_messages"] = []
+            
+            # Try group messages using IM groups endpoint
             try:
                 group_messages = self._extract_group_messages(user_id, from_date, to_date)
                 user_results["group_messages"] = group_messages
@@ -104,6 +116,7 @@ class ChatMessageExtractor:
                 user_results["limitations"].append(f"Group messages: {str(e)}")
                 user_results["group_messages"] = []
             
+            # Try channel messages using correct API endpoint
             try:
                 channel_messages = self._extract_channel_messages(user_id, from_date, to_date)
                 user_results["channel_messages"] = channel_messages
@@ -113,15 +126,24 @@ class ChatMessageExtractor:
                 user_results["limitations"].append(f"Channel messages: {str(e)}")
                 user_results["channel_messages"] = []
             
-            # One-on-one messages are not available through standard API
-            user_results["limitations"].append("One-on-one messages: Not available through standard Zoom API")
-            user_results["one_on_one_messages"] = []
+            # Try space messages using chat spaces endpoint
+            try:
+                space_messages = self._extract_space_messages(user_id, from_date, to_date)
+                user_results["space_messages"] = space_messages
+                logger.info(f"✅ Extracted {len(space_messages)} space messages")
+            except Exception as e:
+                logger.warning(f"⚠️ Space message extraction failed: {e}")
+                user_results["limitations"].append(f"Space messages: {str(e)}")
+                user_results["space_messages"] = []
+            
             
             # Calculate total
             user_results["total_messages"] = (
                 len(meeting_chats) + 
+                len(user_results["one_on_one_messages"]) +
                 len(user_results["group_messages"]) + 
-                len(user_results["channel_messages"])
+                len(user_results["channel_messages"]) +
+                len(user_results["space_messages"])
             )
             
             logger.info(f"✅ Extracted {user_results['total_messages']} chat messages for {user_email}")
@@ -133,26 +155,50 @@ class ChatMessageExtractor:
         return user_results
     
     def _extract_one_on_one_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract one-on-one chat messages"""
+        """Extract one-on-one chat messages using GET /chat/users/{userId}/messages"""
         messages = []
         
         try:
-            # First, get the user's contacts
-            contacts = self._get_user_contacts(user_id)
-            if not contacts:
-                logger.debug(f"No contacts found for user {user_id}")
-                return messages
+            logger.info(f"💬 Extracting one-on-one messages for user {user_id}")
             
-            # Extract messages for each contact
-            for contact in contacts:
-                contact_messages = self._extract_messages_with_contact(
-                    user_id, contact, from_date, to_date
-                )
-                messages.extend(contact_messages)
+            url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
+            params = {
+                "from": from_date,
+                "to": to_date,
+                "page_size": 50
+            }
+            
+            next_page_token = None
+            
+            while True:
+                if next_page_token:
+                    params["next_page_token"] = next_page_token
+                
+                self.rate_limiter.sleep(0)
+                response = requests.get(url, headers=self.auth_headers, params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    page_messages = data.get("messages", [])
+                    messages.extend(page_messages)
+                    
+                    logger.info(f"📥 Retrieved {len(page_messages)} messages from API")
+                    
+                    next_page_token = data.get("next_page_token")
+                    if not next_page_token:
+                        break
+                        
+                elif response.status_code == 404:
+                    logger.info(f"📭 No messages found for user {user_id}")
+                    break
+                else:
+                    logger.error(f"❌ Failed to fetch messages: {response.status_code} - {response.text}")
+                    break
                     
         except Exception as e:
-            logger.error(f"Error extracting one-on-one messages: {e}")
+            logger.error(f"❌ Error extracting one-on-one messages: {e}")
         
+        logger.info(f"✅ Extracted {len(messages)} one-on-one messages")
         return messages
     
     def _get_user_contacts(self, user_id: str) -> List[Dict]:
@@ -244,21 +290,45 @@ class ChatMessageExtractor:
         return messages
     
     def _extract_group_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract group chat messages"""
+        """Extract group chat messages using GET /im/groups"""
         messages = []
         
         try:
-            # Note: The /chat/users/{userId}/groups endpoint may not exist in standard Zoom API
-            # This is a placeholder for potential future implementation
-            logger.debug(f"Group message extraction not implemented - endpoint may not exist")
-            logger.info("📝 Group messages: Not available through standard Zoom API endpoints")
+            logger.info(f"👥 Extracting group messages for user {user_id}")
             
-            # Return empty list for now
-            return messages
+            # Get IM groups
+            groups_url = f"https://api.zoom.us/v2/im/groups"
+            self.rate_limiter.sleep(0)
+            groups_response = requests.get(groups_url, headers=self.auth_headers)
+            
+            if groups_response.status_code == 200:
+                groups_data = groups_response.json()
+                groups = groups_data.get("groups", [])
+                
+                logger.info(f"📊 Found {len(groups)} IM groups")
+                
+                for group in groups:
+                    group_id = group.get("id")
+                    group_name = group.get("name", "Unknown Group")
+                    
+                    if group_id:
+                        logger.info(f"🔍 Checking group: {group_name}")
+                        group_messages = self._extract_group_messages_by_id(
+                            group_id, from_date, to_date
+                        )
+                        if group_messages:
+                            logger.info(f"💬 Found {len(group_messages)} messages in group: {group_name}")
+                        messages.extend(group_messages)
+                        
+            elif groups_response.status_code == 404:
+                logger.info(f"📭 No IM groups found")
+            else:
+                logger.error(f"❌ Failed to fetch IM groups: {groups_response.status_code} - {groups_response.text}")
                 
         except Exception as e:
-            logger.error(f"Error extracting group messages: {e}")
+            logger.error(f"❌ Error extracting group messages: {e}")
         
+        logger.info(f"✅ Extracted {len(messages)} group messages")
         return messages
     
     def _extract_group_messages_by_id(self, group_id: str, from_date: str, to_date: str) -> List[Dict]:
@@ -303,22 +373,115 @@ class ChatMessageExtractor:
         return messages
     
     def _extract_channel_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract channel messages"""
+        """Extract channel messages using GET /chat/users/{userId}/channels"""
         messages = []
         
         try:
-            # Note: The /chat/users/{userId}/channels endpoint may not exist in standard Zoom API
-            # This is a placeholder for potential future implementation
-            logger.debug(f"Channel message extraction not implemented - endpoint may not exist")
-            logger.info("📝 Channel messages: Not available through standard Zoom API endpoints")
+            logger.info(f"📢 Extracting channel messages for user {user_id}")
             
-            # Return empty list for now
-            return messages
+            # Get user's channels
+            channels_url = f"https://api.zoom.us/v2/chat/users/{user_id}/channels"
+            self.rate_limiter.sleep(0)
+            channels_response = requests.get(channels_url, headers=self.auth_headers)
+            
+            if channels_response.status_code == 200:
+                channels_data = channels_response.json()
+                channels = channels_data.get("channels", [])
+                
+                logger.info(f"📊 Found {len(channels)} channels")
+                
+                for channel in channels:
+                    channel_id = channel.get("id")
+                    channel_name = channel.get("name", "Unknown Channel")
+                    
+                    if channel_id:
+                        logger.info(f"🔍 Checking channel: {channel_name}")
+                        channel_messages = self._extract_channel_messages_by_id(
+                            channel_id, from_date, to_date
+                        )
+                        if channel_messages:
+                            logger.info(f"💬 Found {len(channel_messages)} messages in channel: {channel_name}")
+                        messages.extend(channel_messages)
+                        
+            elif channels_response.status_code == 404:
+                logger.info(f"📭 No channels found for user {user_id}")
+            else:
+                logger.error(f"❌ Failed to fetch channels: {channels_response.status_code} - {channels_response.text}")
                 
         except Exception as e:
-            logger.error(f"Error extracting channel messages: {e}")
+            logger.error(f"❌ Error extracting channel messages: {e}")
         
+        logger.info(f"✅ Extracted {len(messages)} channel messages")
         return messages
+    
+    def _extract_space_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
+        """Extract messages from chat spaces using GET /chat/spaces"""
+        messages = []
+        
+        try:
+            logger.info(f"🌌 Extracting space messages for user {user_id}")
+            
+            # Get all spaces
+            spaces_url = f"https://api.zoom.us/v2/chat/spaces"
+            self.rate_limiter.sleep(0)
+            spaces_response = requests.get(spaces_url, headers=self.auth_headers)
+            
+            if spaces_response.status_code == 200:
+                spaces_data = spaces_response.json()
+                spaces = spaces_data.get("spaces", [])
+                
+                logger.info(f"📊 Found {len(spaces)} chat spaces")
+                
+                for space in spaces:
+                    space_id = space.get("id")
+                    space_name = space.get("name", "Unknown Space")
+                    
+                    if space_id:
+                        logger.info(f"🔍 Checking space: {space_name}")
+                        # Get channels in this space
+                        space_channels = self._get_space_channels(space_id)
+                        
+                        for channel in space_channels:
+                            channel_id = channel.get("id")
+                            channel_name = channel.get("name", "Unknown Channel")
+                            
+                            if channel_id:
+                                logger.info(f"  📢 Checking space channel: {channel_name}")
+                                channel_messages = self._extract_channel_messages_by_id(
+                                    channel_id, from_date, to_date
+                                )
+                                if channel_messages:
+                                    logger.info(f"  💬 Found {len(channel_messages)} messages in space channel: {channel_name}")
+                                messages.extend(channel_messages)
+                        
+            elif spaces_response.status_code == 404:
+                logger.info(f"📭 No chat spaces found")
+            else:
+                logger.error(f"❌ Failed to fetch chat spaces: {spaces_response.status_code} - {spaces_response.text}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error extracting space messages: {e}")
+        
+        logger.info(f"✅ Extracted {len(messages)} space messages")
+        return messages
+    
+    def _get_space_channels(self, space_id: str) -> List[Dict]:
+        """Get channels within a space using GET /chat/spaces/{spaceId}/channels"""
+        try:
+            url = f"https://api.zoom.us/v2/chat/spaces/{space_id}/channels"
+            self.rate_limiter.sleep(0)
+            response = requests.get(url, headers=self.auth_headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("channels", [])
+            else:
+                logger.debug(f"Failed to get channels for space {space_id}: {response.status_code}")
+                return []
+                
+        except Exception as e:
+            logger.error(f"Error getting space channels: {e}")
+            return []
     
     def _extract_channel_messages_by_id(self, channel_id: str, from_date: str, to_date: str) -> List[Dict]:
         """Extract messages from a specific channel"""
@@ -712,6 +875,12 @@ class ChatMessageExtractor:
                 channel_file = self.output_dir / "channels" / f"{safe_email}_channels.json"
                 with open(channel_file, 'w', encoding='utf-8') as f:
                     json.dump(chat_data["channel_messages"], f, indent=2, ensure_ascii=False)
+            
+            # Save space messages
+            if chat_data.get("space_messages"):
+                space_file = self.output_dir / "spaces" / f"{safe_email}_spaces.json"
+                with open(space_file, 'w', encoding='utf-8') as f:
+                    json.dump(chat_data["space_messages"], f, indent=2, ensure_ascii=False)
             
             # Save meeting chat messages
             if chat_data.get("meeting_chat_messages"):
