@@ -383,6 +383,8 @@ class ChatMessageExtractor:
         logger.info(f"🎥 Extracting meeting chat messages for {user_email}")
         
         meeting_chats = []
+        recordings_found = 0
+        chat_files_found = 0
         
         try:
             # Get user's recordings to find chat files
@@ -390,7 +392,8 @@ class ChatMessageExtractor:
             params = {
                 "from": from_date,
                 "to": to_date,
-                "page_size": 30
+                "page_size": 30,
+                "include_trash": True  # Include trash recordings
             }
             
             next_page_token = None
@@ -405,9 +408,17 @@ class ChatMessageExtractor:
                 if response.status_code == 200:
                     data = response.json()
                     meetings = data.get("meetings", [])
+                    recordings_found += len(meetings)
+                    
+                    logger.info(f"📊 Found {len(meetings)} meetings with recordings")
                     
                     for meeting in meetings:
                         meeting_id = meeting.get("uuid")
+                        meeting_topic = meeting.get("topic", "Unknown Topic")
+                        start_time = meeting.get("start_time", "Unknown Time")
+                        
+                        logger.debug(f"🔍 Checking meeting: {meeting_topic} ({start_time})")
+                        
                         if meeting_id:
                             # Get detailed recording info
                             recording_details = self._get_meeting_recording_details(meeting_id)
@@ -415,6 +426,9 @@ class ChatMessageExtractor:
                                 chat_files = self._extract_chat_from_recording_files(
                                     recording_details, user_email
                                 )
+                                if chat_files:
+                                    chat_files_found += len(chat_files)
+                                    logger.info(f"💬 Found {len(chat_files)} chat files in meeting: {meeting_topic}")
                                 meeting_chats.extend(chat_files)
                     
                     next_page_token = data.get("next_page_token")
@@ -422,16 +436,154 @@ class ChatMessageExtractor:
                         break
                         
                 elif response.status_code == 404:
-                    logger.debug(f"No recordings found for user {user_id}")
+                    logger.info(f"📭 No recordings found for user {user_email}")
                     break
                 else:
-                    logger.error(f"Failed to fetch recordings: {response.status_code}")
+                    logger.error(f"❌ Failed to fetch recordings: {response.status_code} - {response.text}")
                     break
                     
         except Exception as e:
-            logger.error(f"Error extracting meeting chat messages: {e}")
+            logger.error(f"❌ Error extracting meeting chat messages: {e}")
+        
+        logger.info(f"📊 Meeting chat extraction summary:")
+        logger.info(f"   📹 Total recordings checked: {recordings_found}")
+        logger.info(f"   💬 Chat files found: {chat_files_found}")
+        logger.info(f"   📋 Total chat messages extracted: {len(meeting_chats)}")
+        
+        # Also check meetings where user was a participant (not just host)
+        participant_chats = self._extract_meeting_chat_as_participant(user_id, user_email, from_date, to_date)
+        meeting_chats.extend(participant_chats)
+        
+        # Debug: Show some sample recording data if available
+        if recordings_found > 0:
+            self._debug_show_sample_recordings(user_id, from_date, to_date)
         
         return meeting_chats
+    
+    def _extract_meeting_chat_as_participant(self, user_id: str, user_email: str, from_date: str, to_date: str) -> List[Dict]:
+        """Extract chat messages from meetings where user was a participant"""
+        logger.info(f"🎥 Checking meetings where {user_email} was a participant")
+        
+        participant_chats = []
+        
+        try:
+            # Get user's meeting history (participated meetings)
+            meetings_url = f"https://api.zoom.us/v2/users/{user_id}/meetings"
+            params = {
+                "from": from_date,
+                "to": to_date,
+                "page_size": 30,
+                "type": "past"  # Only past meetings
+            }
+            
+            next_page_token = None
+            
+            while True:
+                if next_page_token:
+                    params["next_page_token"] = next_page_token
+                
+                self.rate_limiter.sleep(0)
+                response = requests.get(meetings_url, headers=self.auth_headers, params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    meetings = data.get("meetings", [])
+                    
+                    logger.info(f"📊 Found {len(meetings)} meetings where user was participant")
+                    
+                    for meeting in meetings:
+                        meeting_id = meeting.get("id")
+                        meeting_topic = meeting.get("topic", "Unknown Topic")
+                        
+                        if meeting_id:
+                            # Check if this meeting has recordings with chat
+                            recording_details = self._get_meeting_recording_details_by_id(meeting_id)
+                            if recording_details:
+                                chat_files = self._extract_chat_from_recording_files(
+                                    recording_details, user_email
+                                )
+                                if chat_files:
+                                    logger.info(f"💬 Found {len(chat_files)} chat files in participant meeting: {meeting_topic}")
+                                participant_chats.extend(chat_files)
+                    
+                    next_page_token = data.get("next_page_token")
+                    if not next_page_token:
+                        break
+                        
+                elif response.status_code == 404:
+                    logger.info(f"📭 No participant meetings found for user {user_email}")
+                    break
+                else:
+                    logger.error(f"❌ Failed to fetch participant meetings: {response.status_code}")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"❌ Error extracting participant meeting chat messages: {e}")
+        
+        return participant_chats
+    
+    def _debug_show_sample_recordings(self, user_id: str, from_date: str, to_date: str):
+        """Debug method to show sample recording data"""
+        try:
+            logger.info("🔍 Debug: Checking sample recording files...")
+            
+            recordings_url = f"https://api.zoom.us/v2/users/{user_id}/recordings"
+            params = {
+                "from": from_date,
+                "to": to_date,
+                "page_size": 5,  # Just get a few samples
+                "include_trash": True
+            }
+            
+            self.rate_limiter.sleep(0)
+            response = requests.get(recordings_url, headers=self.auth_headers, params=params)
+            
+            if response.status_code == 200:
+                data = response.json()
+                meetings = data.get("meetings", [])
+                
+                for i, meeting in enumerate(meetings[:3]):  # Show first 3 meetings
+                    meeting_id = meeting.get("uuid")
+                    topic = meeting.get("topic", "Unknown")
+                    start_time = meeting.get("start_time", "Unknown")
+                    
+                    logger.info(f"🔍 Sample meeting {i+1}: {topic} ({start_time})")
+                    
+                    if meeting_id:
+                        recording_details = self._get_meeting_recording_details(meeting_id)
+                        if recording_details:
+                            files = recording_details.get("recording_files", [])
+                            logger.info(f"   📁 Recording files ({len(files)}):")
+                            
+                            for file_info in files:
+                                file_name = file_info.get("file_name", "Unknown")
+                                file_type = file_info.get("file_type", "Unknown")
+                                file_size = file_info.get("file_size", 0)
+                                logger.info(f"     - {file_name} | Type: {file_type} | Size: {file_size}")
+                        else:
+                            logger.info(f"   ❌ No recording details available")
+                    else:
+                        logger.info(f"   ❌ No meeting ID available")
+                        
+        except Exception as e:
+            logger.error(f"Error in debug method: {e}")
+    
+    def _get_meeting_recording_details_by_id(self, meeting_id: str) -> Optional[Dict]:
+        """Get detailed recording information for a meeting by ID"""
+        try:
+            url = f"https://api.zoom.us/v2/meetings/{meeting_id}/recordings"
+            self.rate_limiter.sleep(0)
+            response = requests.get(url, headers=self.auth_headers)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.debug(f"No recording details for meeting ID {meeting_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting recording details by ID: {e}")
+            return None
     
     def _get_meeting_recording_details(self, meeting_uuid: str) -> Optional[Dict]:
         """Get detailed recording information for a meeting"""
@@ -456,27 +608,86 @@ class ChatMessageExtractor:
         
         try:
             files = recording_data.get("recording_files", [])
+            logger.debug(f"🔍 Checking {len(files)} recording files for chat data")
             
             for file_info in files:
                 file_type = file_info.get("file_type", "").lower()
+                file_name = file_info.get("file_name", "").lower()
+                file_size = file_info.get("file_size", 0)
                 
-                if file_type == "chat" or "chat" in file_info.get("file_name", "").lower():
-                    # This is a chat file - in a real implementation, you'd download and parse it
+                logger.debug(f"📄 File: {file_name} | Type: {file_type} | Size: {file_size}")
+                
+                # Check for chat files - be more comprehensive
+                is_chat_file = (
+                    file_type == "chat" or 
+                    file_type == "txt" or  # Chat files are often saved as .txt
+                    "chat" in file_name or
+                    "message" in file_name or
+                    file_name.endswith(".txt") or  # Chat files are typically .txt
+                    file_name.endswith(".json")    # Sometimes chat is in JSON format
+                )
+                
+                if is_chat_file and file_size > 0:  # Only process non-empty files
+                    logger.info(f"💬 Found potential chat file: {file_info.get('file_name')} ({file_size} bytes)")
+                    
+                    # Try to download and parse the chat file
+                    chat_content = self._download_and_parse_chat_file(file_info)
+                    
                     chat_info = {
                         "meeting_uuid": recording_data.get("uuid"),
                         "meeting_id": recording_data.get("id"),
                         "topic": recording_data.get("topic"),
                         "start_time": recording_data.get("start_time"),
                         "chat_file": file_info,
+                        "chat_content": chat_content,
                         "extracted_by": user_email,
                         "extraction_date": datetime.now().isoformat()
                     }
                     chat_messages.append(chat_info)
                     
         except Exception as e:
-            logger.error(f"Error extracting chat from recording files: {e}")
+            logger.error(f"❌ Error extracting chat from recording files: {e}")
         
         return chat_messages
+    
+    def _download_and_parse_chat_file(self, file_info: Dict) -> Optional[Dict]:
+        """Download and parse a chat file"""
+        try:
+            download_url = file_info.get("download_url")
+            if not download_url:
+                logger.debug("No download URL available for chat file")
+                return None
+            
+            self.rate_limiter.sleep(0)
+            response = requests.get(download_url, headers=self.auth_headers)
+            
+            if response.status_code == 200:
+                content = response.text
+                
+                # Try to parse as JSON first
+                try:
+                    json_content = json.loads(content)
+                    logger.debug(f"📄 Parsed chat file as JSON: {len(content)} characters")
+                    return {
+                        "format": "json",
+                        "content": json_content,
+                        "raw_size": len(content)
+                    }
+                except json.JSONDecodeError:
+                    # Not JSON, treat as plain text
+                    logger.debug(f"📄 Parsed chat file as text: {len(content)} characters")
+                    return {
+                        "format": "text",
+                        "content": content,
+                        "raw_size": len(content)
+                    }
+            else:
+                logger.warning(f"Failed to download chat file: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error downloading/parsing chat file: {e}")
+            return None
     
     def save_user_chat_data(self, user_email: str, chat_data: Dict):
         """Save chat data for a user to files"""
