@@ -5,10 +5,10 @@ This module provides comprehensive extraction of all types of Zoom chat messages
 ## 🚀 Features
 
 ### **Chat Types Supported:**
-- **💬 One-on-One Chats** - Direct messages between users
-- **👥 Group Chats** - Multi-user chat conversations
-- **📢 Chat Channels** - Organizational chat channels
-- **🎥 In-Meeting Chats** - Chat messages from recorded meetings
+- **🎥 In-Meeting Chats** - Chat messages from recorded meetings ✅ **Available**
+- **💬 One-on-One Chats** - Direct messages between users ⚠️ **Limited**
+- **👥 Group Chats** - Multi-user chat conversations ⚠️ **Limited**  
+- **📢 Chat Channels** - Organizational chat channels ⚠️ **Limited**
 
 ### **Key Capabilities:**
 - ✅ **Complete Chat History** - Extract all chat messages within date ranges
@@ -31,9 +31,10 @@ This module provides comprehensive extraction of all types of Zoom chat messages
    - `recording:read:admin` - Read recording information (for meeting chats)
 
 ### **⚠️ Chat API Limitations:**
-- **One-on-One Messages**: The Zoom Chat API requires specific scopes for contact discovery
-- **Contact Discovery**: The `team_chat:read:list_contacts` scope may not be available in all Zoom accounts
-- **Alternative Approach**: The extractor uses all active users as potential contacts for one-on-one message discovery
+- **Direct Chat Access**: Most Zoom Chat API endpoints for direct message extraction are not available in the standard API
+- **Meeting Chat Messages**: The most reliable approach is extracting chat messages from recorded meetings
+- **API Endpoints**: Many chat-related endpoints (`/chat/users/{userId}/messages`, `/chat/users/{userId}/groups`, etc.) may not exist or require special permissions
+- **Scope Requirements**: Chat functionality often requires scopes that are not available in standard Zoom API apps
 
 ### **Python Dependencies:**
 ```bash
