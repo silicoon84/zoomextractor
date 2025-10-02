@@ -40,11 +40,13 @@ logger = logging.getLogger(__name__)
 class ImprovedChatExtractor:
     """Improved chat extractor that avoids duplicate channel processing"""
     
-    def __init__(self, auth_headers: Dict[str, str], output_dir: str = "./chat_extraction"):
+    def __init__(self, auth_headers: Dict[str, str], output_dir: str = "./chat_extraction", auth=None):
         self.auth_headers = auth_headers
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.rate_limiter = RateLimiter()
+        # Store auth object for token refresh
+        self.auth = auth
         
         # Create subdirectories
         (self.output_dir / "channels").mkdir(exist_ok=True)
@@ -53,6 +55,43 @@ class ImprovedChatExtractor:
         (self.output_dir / "_metadata").mkdir(exist_ok=True)
         
         logger.info(f"Chat extraction output: {self.output_dir}")
+    
+    def refresh_auth_headers(self):
+        """Refresh authentication headers if token has expired"""
+        if self.auth:
+            try:
+                logger.info("Refreshing authentication headers...")
+                self.auth_headers = self.auth.get_auth_headers()
+                logger.info("Authentication headers refreshed successfully")
+            except Exception as e:
+                logger.error(f"Failed to refresh auth headers: {e}")
+                raise
+    
+    def make_api_request(self, url: str, params: Dict = None, max_retries: int = 3) -> requests.Response:
+        """Make API request with automatic token refresh on 401 errors"""
+        if params is None:
+            params = {}
+            
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, headers=self.auth_headers, params=params)
+                
+                # If we get a 401 (unauthorized), try to refresh the token
+                if response.status_code == 401 and self.auth and attempt < max_retries - 1:
+                    logger.warning(f"Got 401 error, attempting to refresh token (attempt {attempt + 1})")
+                    self.refresh_auth_headers()
+                    continue
+                
+                return response
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"API request failed, retrying (attempt {attempt + 1}): {e}")
+                    continue
+                else:
+                    raise
+        
+        return response
     
     def get_user_channels(self, user_id: str = "me") -> List[Dict]:
         """Get user's channels using GET /v2/chat/users/{userId}/channels"""
@@ -71,7 +110,7 @@ class ImprovedChatExtractor:
                     params["next_page_token"] = next_page_token
                 
                 self.rate_limiter.sleep(0)
-                response = requests.get(url, headers=self.auth_headers, params=params)
+                response = self.make_api_request(url, params)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -216,7 +255,7 @@ class ImprovedChatExtractor:
                     params["next_page_token"] = next_page_token
                 
                 self.rate_limiter.sleep(0)
-                response = requests.get(url, headers=self.auth_headers, params=params)
+                response = self.make_api_request(url, params)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -253,7 +292,7 @@ class ImprovedChatExtractor:
             logger.info(f"Downloading file: {file_name}")
             
             self.rate_limiter.sleep(0)
-            response = requests.get(download_url, headers=self.auth_headers)
+            response = self.make_api_request(download_url)
             
             if response.status_code == 200:
                 # Create safe filename
@@ -424,7 +463,7 @@ def main():
             return 1
         
         # Initialize extractor
-        extractor = ImprovedChatExtractor(auth_headers, output_dir)
+        extractor = ImprovedChatExtractor(auth_headers, output_dir, auth)
         
         try:
             download_files = not no_files
