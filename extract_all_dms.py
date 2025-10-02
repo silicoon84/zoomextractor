@@ -286,6 +286,12 @@ class DMExtractor:
             logger.error("No users found")
             return {"users": [], "total_conversations": 0, "total_messages": 0, "total_files": 0}
         
+        # Calculate date range
+        to_date = datetime.utcnow().isoformat() + "Z"
+        from_date = (datetime.utcnow() - timedelta(days=days)).isoformat() + "Z"
+        
+        logger.info(f"Date range: {from_date} to {to_date}")
+        
         # Process each user
         user_results = []
         total_conversations = 0
