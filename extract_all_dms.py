@@ -318,9 +318,14 @@ class DMExtractor:
             logger.error("No users found")
             return {"users": [], "total_conversations": 0, "total_messages": 0, "total_files": 0}
         
-        # Calculate date range
+        # Calculate date range - Zoom Chat API has limitations on date ranges
         to_date = datetime.utcnow().isoformat() + "Z"
         from_date = (datetime.utcnow() - timedelta(days=days)).isoformat() + "Z"
+        
+        # Warn about potential date range limitations
+        if days > 365:
+            logger.warning(f"⚠️  Large date range requested ({days} days) - Zoom Chat API may have date range limitations")
+            logger.warning(f"⚠️  API might only return recent messages regardless of date parameters")
         
         logger.info(f"Date range: {from_date} to {to_date}")
         
@@ -405,7 +410,8 @@ def main():
     @click.option('--output-dir', default='./dm_extraction', help='Output directory')
     @click.option('--no-files', is_flag=True, help='Skip downloading file attachments')
     @click.option('--no-inactive', is_flag=True, help='Skip inactive users')
-    def cli(days, output_dir, no_files, no_inactive):
+    @click.option('--test-short', is_flag=True, help='Test with 7 days only to check API functionality')
+    def cli(days, output_dir, no_files, no_inactive, test_short):
         """Extract Direct Messages from All Users' Perspectives"""
         
         # Initialize authentication
@@ -423,6 +429,11 @@ def main():
         try:
             download_files = not no_files
             include_inactive = not no_inactive
+            
+            # Override days for test mode
+            if test_short:
+                days = 7
+                logger.info("🧪 Test mode: Using 7 days only to test API functionality")
             
             # Extract all DMs
             result = extractor.extract_all_dms(
