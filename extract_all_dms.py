@@ -72,6 +72,10 @@ class DMExtractor:
             # Remove None values
             params = {k: v for k, v in params.items() if v is not None}
             
+            # Debug: Log the actual API request
+            logger.info(f"API Request URL: {url}")
+            logger.info(f"API Request Parameters: {params}")
+            
             next_page_token = None
             
             while True:
@@ -83,18 +87,25 @@ class DMExtractor:
                 
                 if response.status_code == 200:
                     data = response.json()
+                    logger.debug(f"API Response: {data}")
                     page_messages = data.get("messages", [])
                     messages.extend(page_messages)
+                    
+                    # Log the actual response structure for debugging
+                    logger.info(f"API returned {len(page_messages)} messages on this page")
+                    if page_messages:
+                        logger.info(f"Sample message structure: {list(page_messages[0].keys()) if page_messages[0] else 'Empty message'}")
                     
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
                         break
                         
                 elif response.status_code == 404:
-                    logger.debug(f"No DM messages found between {user_id} and {to_contact}")
+                    logger.info(f"No DM messages found between {user_id} and {to_contact}")
                     break
                 else:
-                    logger.warning(f"Failed to get DM messages: {response.status_code} - {response.text}")
+                    logger.error(f"Failed to get DM messages: {response.status_code} - {response.text}")
+                    logger.error(f"Full response headers: {dict(response.headers)}")
                     break
                     
         except Exception as e:
@@ -151,12 +162,19 @@ class DMExtractor:
         }
         
         # Get DMs with each other user
+        total_other_users = len([u for u in all_users if u.get("id") != user_id and u.get("email")])
+        logger.info(f"Checking DMs with {total_other_users} other users...")
+        
+        processed_contacts = 0
         for other_user in all_users:
             other_user_id = other_user.get("id")
             other_user_email = other_user.get("email")
             
             if not other_user_id or not other_user_email or other_user_id == user_id:
                 continue
+            
+            processed_contacts += 1
+            logger.info(f"  [{processed_contacts}/{total_other_users}] Checking DM with {other_user_email}")
             
             try:
                 # Get messages between these two users
@@ -169,9 +187,12 @@ class DMExtractor:
                 )
                 
                 if messages:
+                    logger.info(f"    ✅ Found {len(messages)} messages - processing...")
+                    
                     # Download files if requested
                     downloaded_files = []
                     if download_files:
+                        logger.info(f"    📁 Checking for file attachments...")
                         for message in messages:
                             files = message.get("files", [])
                             for file_info in files:
@@ -187,6 +208,7 @@ class DMExtractor:
                     user_folder.mkdir(exist_ok=True)
                     
                     conversation_file = user_folder / f"conversation_with_{safe_other_email}.json"
+                    logger.info(f"    💾 Saving conversation to: {conversation_file}")
                     
                     conversation_data = {
                         "user1_email": user_email,
@@ -211,10 +233,12 @@ class DMExtractor:
                     user_dm_results["total_messages"] += len(messages)
                     user_dm_results["total_files"] += len(downloaded_files)
                     
-                    logger.info(f"  DM with {other_user_email}: {len(messages)} messages, {len(downloaded_files)} files")
+                    logger.info(f"  ✅ DM with {other_user_email}: {len(messages)} messages, {len(downloaded_files)} files")
+                else:
+                    logger.info(f"  ⚪ No messages found with {other_user_email}")
                 
             except Exception as e:
-                logger.error(f"Error extracting DM between {user_email} and {other_user_email}: {e}")
+                logger.error(f"  ❌ Error extracting DM between {user_email} and {other_user_email}: {e}")
                 continue
         
         return user_dm_results
@@ -274,10 +298,11 @@ class DMExtractor:
             user_id = user.get("id")
             
             if not user_email or not user_id:
-                logger.warning(f"Skipping user {i} - missing email or ID")
+                logger.warning(f"[{i}/{len(all_users)}] Skipping user - missing email or ID: {user}")
                 continue
             
             logger.info(f"[{i}/{len(all_users)}] Processing user: {user_email} ({user_id})")
+            logger.info(f"  📅 Date range: {from_date} to {to_date}")
             
             try:
                 # Extract DMs for this user
