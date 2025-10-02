@@ -248,6 +248,10 @@ class ImprovedChatExtractor:
             # Remove None values
             params = {k: v for k, v in params.items() if v is not None}
             
+            # Debug: Log the actual API request
+            logger.info(f"Making API request to: {url}")
+            logger.info(f"Request parameters: {params}")
+            
             next_page_token = None
             
             while True:
@@ -259,8 +263,14 @@ class ImprovedChatExtractor:
                 
                 if response.status_code == 200:
                     data = response.json()
+                    logger.debug(f"API Response: {data}")
                     page_messages = data.get("messages", [])
                     messages.extend(page_messages)
+                    
+                    # Log the actual response structure for debugging
+                    logger.info(f"API returned {len(page_messages)} messages on this page")
+                    if page_messages:
+                        logger.info(f"Sample message structure: {page_messages[0].keys()}")
                     
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
