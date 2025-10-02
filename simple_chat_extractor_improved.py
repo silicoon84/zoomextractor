@@ -323,38 +323,20 @@ class ImprovedChatExtractor:
         logger.info(f"Extracting messages from channel '{channel_name}' ({channel_id})")
         logger.info(f"Date range: {from_date} to {to_date}")
         
-        # Determine if this is a DM channel or group channel
+        # All channels (including "1:1" type which are small group conversations) use to_channel
+        # The "1:1" type in Zoom API refers to small group conversations, not actual 1:1 DMs
         channel_type = channel_info.get("type", "group") if channel_info else "group"
-        is_dm_channel = channel_type == "1:1" or "," in channel_name  # DMs often have comma-separated names
         
-        messages = []
+        logger.info(f"Extracting messages using to_channel parameter (type: {channel_type})")
         
-        if is_dm_channel:
-            logger.info(f"Detected DM channel, extracting from accessible users")
-            # For DM channels, we need to extract from each user's perspective
-            accessible_users = channel_info.get("accessible_by_users", []) if channel_info else []
-            
-            for user_email in accessible_users:
-                if user_email != extractor_user:  # Don't extract with self
-                    logger.info(f"Extracting DM with contact: {user_email}")
-                    user_messages = self.get_messages(
-                        user_id=extractor_user,
-                        to_contact=user_email,
-                        from_date=from_date,
-                        to_date=to_date,
-                        include_files=download_files
-                    )
-                    messages.extend(user_messages)
-        else:
-            logger.info(f"Detected group channel, extracting channel messages")
-            # For group channels, use to_channel parameter
-            messages = self.get_messages(
-                user_id=extractor_user,
-                to_channel=channel_id,
-                from_date=from_date,
-                to_date=to_date,
-                include_files=download_files
-            )
+        # For all channels, use to_channel parameter
+        messages = self.get_messages(
+            user_id=extractor_user,
+            to_channel=channel_id,
+            from_date=from_date,
+            to_date=to_date,
+            include_files=download_files
+        )
         
         # Download files if requested
         downloaded_files = []
