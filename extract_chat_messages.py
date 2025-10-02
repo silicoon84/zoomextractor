@@ -206,7 +206,7 @@ class ChatMessageExtractor:
         try:
             # First, get list of chat groups for the user
             groups_url = f"https://api.zoom.us/v2/chat/users/{user_id}/groups"
-                self.rate_limiter.sleep(0)
+            self.rate_limiter.sleep(0)
             groups_response = requests.get(groups_url, headers=self.auth_headers)
             
             if groups_response.status_code == 200:
@@ -279,7 +279,7 @@ class ChatMessageExtractor:
         try:
             # First, get list of channels for the user
             channels_url = f"https://api.zoom.us/v2/chat/users/{user_id}/channels"
-                self.rate_limiter.sleep(0)
+            self.rate_limiter.sleep(0)
             channels_response = requests.get(channels_url, headers=self.auth_headers)
             
             if channels_response.status_code == 200:
@@ -421,7 +421,7 @@ class ChatMessageExtractor:
         """Get detailed recording information for a meeting"""
         try:
             url = f"https://api.zoom.us/v2/meetings/{meeting_uuid}/recordings"
-                self.rate_limiter.sleep(0)
+            self.rate_limiter.sleep(0)
             response = requests.get(url, headers=self.auth_headers)
             
             if response.status_code == 200:
