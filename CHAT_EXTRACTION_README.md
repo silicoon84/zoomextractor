@@ -30,6 +30,11 @@ This module provides comprehensive extraction of all types of Zoom chat messages
    - `user:read:admin` - Read user information
    - `recording:read:admin` - Read recording information (for meeting chats)
 
+### **⚠️ Chat API Limitations:**
+- **One-on-One Messages**: The Zoom Chat API requires specific scopes for contact discovery
+- **Contact Discovery**: The `team_chat:read:list_contacts` scope may not be available in all Zoom accounts
+- **Alternative Approach**: The extractor uses all active users as potential contacts for one-on-one message discovery
+
 ### **Python Dependencies:**
 ```bash
 pip install requests python-dotenv click tqdm PyJWT python-dateutil colorama

@@ -77,25 +77,33 @@ class ChatMessageExtractor:
             "channel_messages": [],
             "meeting_chat_messages": [],
             "total_messages": 0,
-            "extraction_date": datetime.now().isoformat()
+            "extraction_date": datetime.now().isoformat(),
+            "limitations": []
         }
         
         try:
-            # Extract one-on-one chat messages
-            one_on_one = self._extract_one_on_one_messages(user_id, from_date, to_date)
-            user_results["one_on_one_messages"] = one_on_one
-            
-            # Extract group chat messages
+            # Extract group chat messages (most reliable)
             group_messages = self._extract_group_messages(user_id, from_date, to_date)
             user_results["group_messages"] = group_messages
             
-            # Extract channel messages
+            # Extract channel messages (most reliable)
             channel_messages = self._extract_channel_messages(user_id, from_date, to_date)
             user_results["channel_messages"] = channel_messages
             
+            # Extract one-on-one chat messages (limited by API scope)
+            try:
+                one_on_one = self._extract_one_on_one_messages(user_id, from_date, to_date)
+                user_results["one_on_one_messages"] = one_on_one
+            except Exception as e:
+                logger.warning(f"⚠️ One-on-one message extraction limited: {e}")
+                user_results["limitations"].append(f"One-on-one messages limited: {str(e)}")
+                user_results["one_on_one_messages"] = []
+            
             # Calculate total
             user_results["total_messages"] = (
-                len(one_on_one) + len(group_messages) + len(channel_messages)
+                len(user_results["one_on_one_messages"]) + 
+                len(group_messages) + 
+                len(channel_messages)
             )
             
             logger.info(f"✅ Extracted {user_results['total_messages']} chat messages for {user_email}")
@@ -134,21 +142,39 @@ class ChatMessageExtractor:
         contacts = []
         
         try:
-            url = f"https://api.zoom.us/v2/chat/users/{user_id}/contacts"
-            self.rate_limiter.sleep(0)
-            response = requests.get(url, headers=self.auth_headers)
+            # Note: The /chat/users/{userId}/contacts endpoint requires team_chat:read:list_contacts scope
+            # which may not be available. As an alternative, we can try to get contacts from other sources
+            # or use a different approach for one-on-one message extraction.
             
-            if response.status_code == 200:
-                data = response.json()
-                contacts = data.get("contacts", [])
-                logger.debug(f"Found {len(contacts)} contacts for user {user_id}")
-            elif response.status_code == 404:
-                logger.debug(f"No contacts found for user {user_id}")
-            else:
-                logger.warning(f"Failed to fetch contacts: {response.status_code} - {response.text}")
+            # For now, we'll return an empty list and log the limitation
+            logger.warning(f"Contact discovery not available for user {user_id} - requires additional scope")
+            logger.info("One-on-one message extraction may be limited without contact discovery")
+            
+            # Alternative approach: Try to get all users and treat them as potential contacts
+            # This is a simplified approach that may not capture all one-on-one messages
+            try:
+                from zoom_extractor.users import UserEnumerator
+                user_enumerator = UserEnumerator(self.auth_headers)
+                all_users = list(user_enumerator.list_all_users(user_type="active"))
+                
+                # Filter out the current user and create contact-like entries
+                for user in all_users:
+                    if user.get("id") != user_id:
+                        contact = {
+                            "id": user.get("id"),
+                            "email": user.get("email"),
+                            "first_name": user.get("first_name"),
+                            "last_name": user.get("last_name")
+                        }
+                        contacts.append(contact)
+                
+                logger.info(f"Using {len(contacts)} active users as potential contacts for user {user_id}")
+                
+            except Exception as e:
+                logger.warning(f"Could not get users as contacts: {e}")
                 
         except Exception as e:
-            logger.error(f"Error fetching contacts for user {user_id}: {e}")
+            logger.error(f"Error in contact discovery for user {user_id}: {e}")
         
         return contacts
     
