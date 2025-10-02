@@ -21,11 +21,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import click
+from tqdm import tqdm
 
 # Add the zoom_extractor module to the path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from zoom_extractor.auth import get_auth_from_env
+from zoom_extractor.users import UserEnumerator
 from zoom_extractor.rate_limiter import RateLimiter
 from dotenv import load_dotenv
 
@@ -318,7 +320,7 @@ class SimpleChatExtractor:
             return {"channels": [], "total_messages": 0, "total_files": 0}
         
         # Save channels list
-        channels_file = self.output_dir / "channels" / "user_channels.json"
+        channels_file = self.output_dir / "channels" / f"user_{user_id}_channels.json"
         with open(channels_file, 'w', encoding='utf-8') as f:
             json.dump(channels, f, indent=2, ensure_ascii=False)
         
@@ -361,12 +363,124 @@ class SimpleChatExtractor:
         }
         
         # Save summary
-        summary_file = self.output_dir / "_metadata" / "extraction_summary.json"
+        summary_file = self.output_dir / "_metadata" / f"user_{user_id}_summary.json"
         with open(summary_file, 'w', encoding='utf-8') as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
         
         logger.info(f"All channels extraction complete: {total_messages} messages, {total_files} files")
         return summary
+    
+    def extract_all_users_all_channels(self, days: int = 30, download_files: bool = True,
+                                     include_inactive: bool = True) -> Dict[str, Any]:
+        """Extract messages from all users and their channels"""
+        
+        logger.info("Starting comprehensive chat extraction for all users")
+        
+        # Initialize user enumerator
+        user_enumerator = UserEnumerator(self.auth_headers)
+        
+        # Get all users
+        all_users = []
+        
+        logger.info("Getting active users...")
+        try:
+            active_users = list(user_enumerator.list_all_users(user_type="active"))
+            all_users.extend(active_users)
+            logger.info(f"Found {len(active_users)} active users")
+        except Exception as e:
+            logger.error(f"Could not get active users: {e}")
+        
+        if include_inactive:
+            logger.info("Getting inactive users...")
+            try:
+                inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+                all_users.extend(inactive_users)
+                logger.info(f"Found {len(inactive_users)} inactive users")
+            except Exception as e:
+                logger.error(f"Could not get inactive users: {e}")
+        
+        logger.info("Getting pending users...")
+        try:
+            pending_users = list(user_enumerator.list_all_users(user_type="pending"))
+            all_users.extend(pending_users)
+            logger.info(f"Found {len(pending_users)} pending users")
+        except Exception as e:
+            logger.error(f"Could not get pending users: {e}")
+        
+        logger.info(f"Total users to process: {len(all_users)}")
+        
+        if not all_users:
+            logger.error("No users found")
+            return {"users": [], "total_messages": 0, "total_files": 0, "total_channels": 0}
+        
+        # Process each user
+        user_results = []
+        total_messages = 0
+        total_files = 0
+        total_channels = 0
+        processed_users = 0
+        
+        # Use tqdm for progress indication
+        for i, user in enumerate(tqdm(all_users, desc="Processing users"), 1):
+            user_email = user.get("email")
+            user_id = user.get("id")
+            
+            if not user_email or not user_id:
+                logger.warning(f"Skipping user {i} - missing email or ID")
+                continue
+            
+            logger.info(f"[{i}/{len(all_users)}] Processing user: {user_email} ({user_id})")
+            
+            try:
+                # Extract all channels for this user
+                user_result = self.extract_all_channels(
+                    user_id=user_id,
+                    days=days,
+                    download_files=download_files
+                )
+                
+                user_result["user_email"] = user_email
+                user_result["user_id"] = user_id
+                user_results.append(user_result)
+                
+                # Update totals
+                total_messages += user_result.get("total_messages", 0)
+                total_files += user_result.get("total_files", 0)
+                total_channels += user_result.get("total_channels", 0)
+                processed_users += 1
+                
+                logger.info(f"User {user_email}: {user_result.get('total_messages', 0)} messages, {user_result.get('total_files', 0)} files")
+                
+            except Exception as e:
+                logger.error(f"Error processing user {user_email}: {e}")
+                continue
+        
+        # Create overall summary
+        overall_summary = {
+            "extraction_date": datetime.now().isoformat(),
+            "total_users_found": len(all_users),
+            "processed_users": processed_users,
+            "total_channels": total_channels,
+            "total_messages": total_messages,
+            "total_files": total_files,
+            "date_range_days": days,
+            "include_inactive": include_inactive,
+            "download_files": download_files,
+            "user_results": user_results
+        }
+        
+        # Save overall summary
+        overall_summary_file = self.output_dir / "_metadata" / "overall_extraction_summary.json"
+        with open(overall_summary_file, 'w', encoding='utf-8') as f:
+            json.dump(overall_summary, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Comprehensive extraction complete!")
+        logger.info(f"Processed {processed_users}/{len(all_users)} users")
+        logger.info(f"Total channels: {total_channels}")
+        logger.info(f"Total messages: {total_messages}")
+        logger.info(f"Total files: {total_files}")
+        
+        return overall_summary
 
 def main():
     """Main CLI function"""
@@ -375,11 +489,13 @@ def main():
     @click.option('--user', default='me', help='User ID (default: me)')
     @click.option('--contact', help='Contact email/user ID for direct messages')
     @click.option('--channel', help='Channel ID for channel messages')
+    @click.option('--all-users', is_flag=True, help='Extract from all users and their channels')
     @click.option('--days', default=30, help='Number of days to look back (default: 30)')
     @click.option('--output-dir', default='./chat_extraction', help='Output directory')
     @click.option('--no-files', is_flag=True, help='Skip downloading file attachments')
+    @click.option('--no-inactive', is_flag=True, help='Skip inactive users (only for --all-users)')
     @click.option('--list-channels', is_flag=True, help='Just list channels and exit')
-    def cli(user, contact, channel, days, output_dir, no_files, list_channels):
+    def cli(user, contact, channel, all_users, days, output_dir, no_files, no_inactive, list_channels):
         """Simple Zoom Chat Extractor"""
         
         # Initialize authentication
@@ -406,14 +522,21 @@ def main():
                 return 0
             
             # Validate arguments
-            if not contact and not channel:
-                logger.error("Must specify either --contact or --channel")
+            if not contact and not channel and not all_users:
+                logger.error("Must specify either --contact, --channel, or --all-users")
                 return 1
             
             download_files = not no_files
+            include_inactive = not no_inactive
             
             # Extract based on mode
-            if contact:
+            if all_users:
+                result = extractor.extract_all_users_all_channels(
+                    days=days,
+                    download_files=download_files,
+                    include_inactive=include_inactive
+                )
+            elif contact:
                 result = extractor.extract_contact_messages(
                     user_id=user,
                     contact=contact,

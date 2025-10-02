@@ -53,6 +53,19 @@ python simple_chat_extractor.py --contact user@example.com
 python simple_chat_extractor.py --contact user@example.com --days 7
 ```
 
+### Extract All Users and Channels
+
+```bash
+# Extract from ALL users and their channels (last 30 days)
+python simple_chat_extractor.py --all-users
+
+# Extract from all users (last 7 days, no inactive users)
+python simple_chat_extractor.py --all-users --days 7 --no-inactive
+
+# Extract from all users without downloading files
+python simple_chat_extractor.py --all-users --no-files
+```
+
 ### Custom Output Directory
 
 ```bash
@@ -65,15 +78,20 @@ python simple_chat_extractor.py --channel channelId123 --output-dir ./my_chat_da
 ```
 chat_extraction/
 ├── channels/
-│   └── user_channels.json          # List of all channels
+│   ├── user_channels.json          # List of all channels (single user)
+│   ├── user_user1_channels.json    # Channels for user1
+│   └── user_user2_channels.json    # Channels for user2
 ├── messages/
 │   ├── channel_abc123_messages.json # Channel messages
-│   └── contact_user_example_com_messages.json # Contact messages
+│   ├── contact_user_example_com_messages.json # Contact messages
+│   └── channel_xyz789_messages.json # More channel messages
 ├── files/
 │   ├── file123_document.pdf        # Downloaded attachments
 │   └── file456_image.png
 └── _metadata/
-    └── extraction_summary.json     # Summary of extraction
+    ├── user_user1_summary.json     # Summary for user1
+    ├── user_user2_summary.json     # Summary for user2
+    └── overall_extraction_summary.json # Overall summary
 ```
 
 ## Message Data Structure
@@ -139,6 +157,9 @@ python simple_chat_extractor.py --contact colleague@company.com --days 14
 python simple_chat_extractor.py --channel channel1 --days 30
 python simple_chat_extractor.py --channel channel2 --days 30
 python simple_chat_extractor.py --channel channel3 --days 30
+
+# Or extract from ALL users and channels at once
+python simple_chat_extractor.py --all-users --days 30
 ```
 
 ## Error Handling
