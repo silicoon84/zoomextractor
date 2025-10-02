@@ -45,7 +45,7 @@ class DMExtractor:
         self.rate_limiter = RateLimiter()
         
         # Create subdirectories
-        (self.output_dir / "conversations").mkdir(exist_ok=True)
+        (self.output_dir / "users").mkdir(exist_ok=True)
         (self.output_dir / "files").mkdir(exist_ok=True)
         (self.output_dir / "_metadata").mkdir(exist_ok=True)
         
@@ -179,9 +179,14 @@ class DMExtractor:
                                 if file_path:
                                     downloaded_files.append(file_path)
                     
-                    # Save conversation
+                    # Create user folder and save conversation
+                    safe_user_email = user_email.replace("@", "_").replace(".", "_")
                     safe_other_email = other_user_email.replace("@", "_").replace(".", "_")
-                    conversation_file = self.output_dir / "conversations" / f"{user_email.replace('@', '_').replace('.', '_')}_to_{safe_other_email}.json"
+                    
+                    user_folder = self.output_dir / "users" / safe_user_email
+                    user_folder.mkdir(exist_ok=True)
+                    
+                    conversation_file = user_folder / f"conversation_with_{safe_other_email}.json"
                     
                     conversation_data = {
                         "user1_email": user_email,
@@ -200,7 +205,7 @@ class DMExtractor:
                         "with_user": other_user_email,
                         "message_count": len(messages),
                         "downloaded_files": len(downloaded_files),
-                        "conversation_file": str(conversation_file)
+                        "conversation_file": str(conversation_file.relative_to(self.output_dir))
                     })
                     
                     user_dm_results["total_messages"] += len(messages)
