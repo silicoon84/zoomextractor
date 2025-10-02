@@ -67,7 +67,7 @@ class ChatMessageExtractor:
     def extract_user_chat_messages(self, user_id: str, user_email: str, 
                                  from_date: str, to_date: str) -> Dict[str, Any]:
         """Extract chat messages for a specific user"""
-        logger.info(f"ðŸ“± Extracting chat messages for {user_email} ({user_id})")
+        logger.info(f"📱 Extracting chat messages for {user_email} ({user_id})")
         
         user_results = {
             "user_id": user_id,
@@ -652,7 +652,6 @@ def extract_all_chat_messages(
     from_date: str = "2020-01-01",
     to_date: Optional[str] = None,
     include_inactive_users: bool = True,
-    include_meeting_chats: bool = True,
     dry_run: bool = False
 ):
     """Main function to extract all chat messages"""
@@ -774,13 +773,7 @@ def extract_all_chat_messages(
                 user_id, user_email, from_date, to_date or datetime.now().strftime('%Y-%m-%d')
             )
             
-            # Extract meeting chat messages if requested
-            if include_meeting_chats:
-                meeting_chats = extractor.extract_meeting_chat_messages(
-                    user_id, user_email, from_date, to_date or datetime.now().strftime('%Y-%m-%d')
-                )
-                chat_data["meeting_chat_messages"] = meeting_chats
-                chat_data["total_messages"] += len(meeting_chats)
+            # Meeting chat messages are handled elsewhere - skip
             
             # Save data
             extractor.save_user_chat_data(user_email, chat_data)
@@ -891,7 +884,6 @@ Examples:
             from_date=args.from_date,
             to_date=args.to_date,
             include_inactive_users=args.include_inactive,
-            include_meeting_chats=args.include_meeting_chats,
             dry_run=args.dry_run
         )
         
