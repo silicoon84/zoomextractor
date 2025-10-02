@@ -111,16 +111,66 @@ class ChatMessageExtractor:
         messages = []
         
         try:
+            # First, get the user's contacts
+            contacts = self._get_user_contacts(user_id)
+            if not contacts:
+                logger.debug(f"No contacts found for user {user_id}")
+                return messages
+            
+            # Extract messages for each contact
+            for contact in contacts:
+                contact_messages = self._extract_messages_with_contact(
+                    user_id, contact, from_date, to_date
+                )
+                messages.extend(contact_messages)
+                    
+        except Exception as e:
+            logger.error(f"Error extracting one-on-one messages: {e}")
+        
+        return messages
+    
+    def _get_user_contacts(self, user_id: str) -> List[Dict]:
+        """Get user's contacts for one-on-one messaging"""
+        contacts = []
+        
+        try:
+            url = f"https://api.zoom.us/v2/chat/users/{user_id}/contacts"
+            self.rate_limiter.sleep(0)
+            response = requests.get(url, headers=self.auth_headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                contacts = data.get("contacts", [])
+                logger.debug(f"Found {len(contacts)} contacts for user {user_id}")
+            elif response.status_code == 404:
+                logger.debug(f"No contacts found for user {user_id}")
+            else:
+                logger.warning(f"Failed to fetch contacts: {response.status_code} - {response.text}")
+                
+        except Exception as e:
+            logger.error(f"Error fetching contacts for user {user_id}: {e}")
+        
+        return contacts
+    
+    def _extract_messages_with_contact(self, user_id: str, contact: Dict, from_date: str, to_date: str) -> List[Dict]:
+        """Extract messages between user and a specific contact"""
+        messages = []
+        
+        try:
+            contact_id = contact.get("id") or contact.get("email")
+            if not contact_id:
+                return messages
+            
             url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
             params = {
                 "from": from_date,
                 "to": to_date,
+                "to_contact": contact_id,
                 "page_size": 50,
                 "include_fields": "message,date_time,sender,receiver,message_type"
             }
             
             next_page_token = None
-            page_count = 0
             
             while True:
                 if next_page_token:
@@ -132,28 +182,20 @@ class ChatMessageExtractor:
                 if response.status_code == 200:
                     data = response.json()
                     page_messages = data.get("messages", [])
-                    
-                    # Filter for one-on-one messages (not group/channel)
-                    for msg in page_messages:
-                        if self._is_one_on_one_message(msg):
-                            messages.append(msg)
-                    
-                    page_count += 1
-                    logger.debug(f"Fetched page {page_count} of one-on-one messages")
+                    messages.extend(page_messages)
                     
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
                         break
                         
                 elif response.status_code == 404:
-                    logger.debug(f"No one-on-one messages found for user {user_id}")
                     break
                 else:
-                    logger.error(f"Failed to fetch one-on-one messages: {response.status_code} - {response.text}")
+                    logger.warning(f"Failed to fetch messages with contact {contact_id}: {response.status_code}")
                     break
                     
         except Exception as e:
-            logger.error(f"Error extracting one-on-one messages: {e}")
+            logger.error(f"Error extracting messages with contact {contact_id}: {e}")
         
         return messages
     
@@ -164,7 +206,7 @@ class ChatMessageExtractor:
         try:
             # First, get list of chat groups for the user
             groups_url = f"https://api.zoom.us/v2/chat/users/{user_id}/groups"
-            self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
             groups_response = requests.get(groups_url, headers=self.auth_headers)
             
             if groups_response.status_code == 200:
@@ -237,7 +279,7 @@ class ChatMessageExtractor:
         try:
             # First, get list of channels for the user
             channels_url = f"https://api.zoom.us/v2/chat/users/{user_id}/channels"
-            self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
             channels_response = requests.get(channels_url, headers=self.auth_headers)
             
             if channels_response.status_code == 200:
@@ -267,11 +309,14 @@ class ChatMessageExtractor:
         messages = []
         
         try:
+            # For channel messages, we need to use the user endpoint with to_channel parameter
+            # This is a simplified approach - in practice, you'd need the user_id
             url = f"https://api.zoom.us/v2/chat/channels/{channel_id}/messages"
             params = {
                 "from": from_date,
                 "to": to_date,
-                "page_size": 50
+                "page_size": 50,
+                "include_fields": "message,date_time,sender,receiver,message_type"
             }
             
             next_page_token = None
@@ -295,7 +340,7 @@ class ChatMessageExtractor:
                 elif response.status_code == 404:
                     break
                 else:
-                    logger.error(f"Failed to fetch channel messages: {response.status_code}")
+                    logger.warning(f"Failed to fetch channel messages: {response.status_code} - {response.text}")
                     break
                     
         except Exception as e:
@@ -376,7 +421,7 @@ class ChatMessageExtractor:
         """Get detailed recording information for a meeting"""
         try:
             url = f"https://api.zoom.us/v2/meetings/{meeting_uuid}/recordings"
-            self.rate_limiter.wait()
+                self.rate_limiter.sleep(0)
             response = requests.get(url, headers=self.auth_headers)
             
             if response.status_code == 200:
