@@ -447,6 +447,60 @@ class ImprovedChatExtractor:
         logger.info(f"Total files: {total_files}")
         
         return summary
+    
+    def extract_single_channel(self, channel_id: str, days: int = 30, download_files: bool = True,
+                              extractor_user: str = "me") -> Dict[str, Any]:
+        """Extract messages from a single channel by ID"""
+        
+        logger.info(f"Extracting messages from single channel: {channel_id}")
+        
+        # Try to get channel info from the channels list if it exists
+        channel_info = None
+        channel_name = "Unknown"
+        
+        try:
+            # Check if we have the channels file from a previous run
+            channels_file = self.output_dir / "channels" / "all_unique_channels.json"
+            if channels_file.exists():
+                with open(channels_file, 'r', encoding='utf-8') as f:
+                    all_channels = json.load(f)
+                
+                # Find the channel in the list
+                for channel in all_channels:
+                    if channel.get("id") == channel_id:
+                        channel_info = channel
+                        channel_name = channel.get("name", "Unknown")
+                        break
+            
+            logger.info(f"Found channel: {channel_name}")
+            
+        except Exception as e:
+            logger.warning(f"Could not load channel info: {e}")
+        
+        # Extract messages from the channel
+        result = self.extract_channel_messages(
+            channel_id=channel_id,
+            channel_name=channel_name,
+            channel_info=channel_info,
+            days=days,
+            download_files=download_files,
+            extractor_user=extractor_user
+        )
+        
+        # Save single channel result
+        result["extraction_type"] = "single_channel"
+        result["requested_channel_id"] = channel_id
+        
+        summary_file = self.output_dir / "_metadata" / f"single_channel_{channel_id}_summary.json"
+        with open(summary_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Single channel extraction complete!")
+        logger.info(f"Channel: {channel_name}")
+        logger.info(f"Messages: {result.get('message_count', 0)}")
+        logger.info(f"Files: {len(result.get('downloaded_files', []))}")
+        
+        return result
 
 def main():
     """Main CLI function"""
@@ -458,7 +512,8 @@ def main():
     @click.option('--no-files', is_flag=True, help='Skip downloading file attachments')
     @click.option('--no-inactive', is_flag=True, help='Skip inactive users when collecting channels')
     @click.option('--list-channels', is_flag=True, help='Just list unique channels and exit')
-    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels):
+    @click.option('--channel-id', help='Extract messages from a specific channel ID only')
+    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id):
         """Improved Simple Zoom Chat Extractor - No Duplicate Channels"""
         
         # Initialize authentication
@@ -488,13 +543,22 @@ def main():
                     logger.info(f"  {channel_id}: {channel_name} (accessible by {len(accessible_users)} users)")
                 return 0
             
-            # Extract from all unique channels
-            result = extractor.extract_all_unique_channels(
-                days=days,
-                download_files=download_files,
-                include_inactive=include_inactive,
-                extractor_user=extractor_user
-            )
+            # Single channel extraction mode
+            if channel_id:
+                result = extractor.extract_single_channel(
+                    channel_id=channel_id,
+                    days=days,
+                    download_files=download_files,
+                    extractor_user=extractor_user
+                )
+            else:
+                # Extract from all unique channels
+                result = extractor.extract_all_unique_channels(
+                    days=days,
+                    download_files=download_files,
+                    include_inactive=include_inactive,
+                    extractor_user=extractor_user
+                )
             
             logger.info("Extraction completed successfully!")
             return 0
