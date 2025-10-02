@@ -483,9 +483,32 @@ class ImprovedChatExtractor:
                         break
             
             logger.info(f"Found channel: {channel_name}")
+            if channel_info:
+                logger.info(f"Channel type: {channel_info.get('type', 'Unknown')}")
+                logger.info(f"Channel status: {channel_info.get('status', 'Unknown')}")
+                logger.info(f"Accessible by users: {len(channel_info.get('accessible_by_users', []))}")
             
         except Exception as e:
             logger.warning(f"Could not load channel info: {e}")
+        
+        # First, let's try to verify the channel exists and we have access to it
+        logger.info("Verifying channel access...")
+        try:
+            # Try to get channel details directly
+            channel_details_url = f"https://api.zoom.us/v2/chat/users/{extractor_user}/channels/{channel_id}"
+            channel_response = self.make_api_request(channel_details_url)
+            
+            if channel_response.status_code == 200:
+                channel_details = channel_response.json()
+                logger.info(f"Channel details retrieved successfully: {channel_details}")
+            elif channel_response.status_code == 404:
+                logger.error(f"Channel {channel_id} not found or not accessible to user {extractor_user}")
+                return {"error": "Channel not found or not accessible", "channel_id": channel_id}
+            else:
+                logger.warning(f"Could not retrieve channel details: {channel_response.status_code} - {channel_response.text}")
+                
+        except Exception as e:
+            logger.warning(f"Error verifying channel access: {e}")
         
         # Extract messages from the channel
         result = self.extract_channel_messages(
