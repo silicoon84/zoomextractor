@@ -5,10 +5,11 @@ This module provides comprehensive extraction of all types of Zoom chat messages
 ## 🚀 Features
 
 ### **Chat Types Supported:**
-- **🎥 In-Meeting Chats** - Chat messages from recorded meetings ✅ **Available**
-- **💬 One-on-One Chats** - Direct messages between users ⚠️ **Limited**
-- **👥 Group Chats** - Multi-user chat conversations ⚠️ **Limited**  
-- **📢 Chat Channels** - Organizational chat channels ⚠️ **Limited**
+- **💬 One-on-One Chats** - Direct messages between users ✅ **Available**
+- **👥 Group Chats** - Multi-user chat conversations ✅ **Available**  
+- **📢 Chat Channels** - Organizational chat channels ✅ **Available**
+- **🌌 Chat Spaces** - Shared spaces with channels ✅ **Available**
+- **🎥 In-Meeting Chats** - Chat messages from recorded meetings ⏭️ **Handled elsewhere**
 
 ### **Key Capabilities:**
 - ✅ **Complete Chat History** - Extract all chat messages within date ranges
@@ -31,10 +32,10 @@ This module provides comprehensive extraction of all types of Zoom chat messages
    - `recording:read:admin` - Read recording information (for meeting chats)
 
 ### **⚠️ Chat API Limitations:**
-- **Direct Chat Access**: Most Zoom Chat API endpoints for direct message extraction are not available in the standard API
-- **Meeting Chat Messages**: The most reliable approach is extracting chat messages from recorded meetings
-- **API Endpoints**: Many chat-related endpoints (`/chat/users/{userId}/messages`, `/chat/users/{userId}/groups`, etc.) may not exist or require special permissions
-- **Scope Requirements**: Chat functionality often requires scopes that are not available in standard Zoom API apps
+- **Meeting Chat Messages**: Meeting chat messages are extracted separately via the recordings extraction process
+- **API Endpoints**: Uses official Zoom Chat API endpoints with proper parameter requirements
+- **Scope Requirements**: Chat functionality requires appropriate scopes (`chat:read:admin`, `user:read:admin`, etc.)
+- **Contact Discovery**: One-on-one messages require contact discovery via the official contacts endpoint
 
 ### **Python Dependencies:**
 ```bash

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Zoom Chat Messages Extractor
 
@@ -60,7 +60,6 @@ class ChatMessageExtractor:
         (self.output_dir / "group_chats").mkdir(exist_ok=True)
         (self.output_dir / "channels").mkdir(exist_ok=True)
         (self.output_dir / "spaces").mkdir(exist_ok=True)
-        (self.output_dir / "meeting_chats").mkdir(exist_ok=True)
         (self.output_dir / "_metadata").mkdir(exist_ok=True)
         
         logger.info(f"Chat messages will be saved to: {self.output_dir}")
@@ -68,7 +67,7 @@ class ChatMessageExtractor:
     def extract_user_chat_messages(self, user_id: str, user_email: str, 
                                  from_date: str, to_date: str) -> Dict[str, Any]:
         """Extract chat messages for a specific user"""
-        logger.info(f"📱 Extracting chat messages for {user_email} ({user_id})")
+        logger.info(f"ðŸ“± Extracting chat messages for {user_email} ({user_id})")
         
         user_results = {
             "user_id": user_id,
@@ -87,22 +86,21 @@ class ChatMessageExtractor:
         try:
             # Note: Zoom Chat API endpoints for direct message extraction are limited
             # Most chat functionality requires specific scopes that may not be available
-            # Focus on what's reliably accessible: meeting chat messages from recordings
+            # Meeting chat messages are handled elsewhere in the recordings extraction
             
-            logger.info("📝 Note: Zoom Chat API has limited direct message access")
-            user_results["api_notes"].append("Zoom Chat API endpoints are limited - focusing on meeting chat messages")
+            logger.info("ðŸ“ Extracting chat messages (meeting chats handled elsewhere)")
+            user_results["api_notes"].append("Meeting chat messages are extracted separately via recordings")
             
-            # Extract meeting chat messages (most reliable approach)
-            meeting_chats = self.extract_meeting_chat_messages(user_id, user_email, from_date, to_date)
-            user_results["meeting_chat_messages"] = meeting_chats
+            # Skip meeting chat messages - handled elsewhere
+            user_results["meeting_chat_messages"] = []
             
             # Try one-on-one messages using correct API endpoint
             try:
                 one_on_one_messages = self._extract_one_on_one_messages(user_id, from_date, to_date)
                 user_results["one_on_one_messages"] = one_on_one_messages
-                logger.info(f"✅ Extracted {len(one_on_one_messages)} one-on-one messages")
+                logger.info(f"âœ… Extracted {len(one_on_one_messages)} one-on-one messages")
             except Exception as e:
-                logger.warning(f"⚠️ One-on-one message extraction failed: {e}")
+                logger.warning(f"âš ï¸ One-on-one message extraction failed: {e}")
                 user_results["limitations"].append(f"One-on-one messages: {str(e)}")
                 user_results["one_on_one_messages"] = []
             
@@ -110,9 +108,9 @@ class ChatMessageExtractor:
             try:
                 group_messages = self._extract_group_messages(user_id, from_date, to_date)
                 user_results["group_messages"] = group_messages
-                logger.info(f"✅ Extracted {len(group_messages)} group messages")
+                logger.info(f"âœ… Extracted {len(group_messages)} group messages")
             except Exception as e:
-                logger.warning(f"⚠️ Group message extraction failed: {e}")
+                logger.warning(f"âš ï¸ Group message extraction failed: {e}")
                 user_results["limitations"].append(f"Group messages: {str(e)}")
                 user_results["group_messages"] = []
             
@@ -120,9 +118,9 @@ class ChatMessageExtractor:
             try:
                 channel_messages = self._extract_channel_messages(user_id, from_date, to_date)
                 user_results["channel_messages"] = channel_messages
-                logger.info(f"✅ Extracted {len(channel_messages)} channel messages")
+                logger.info(f"âœ… Extracted {len(channel_messages)} channel messages")
             except Exception as e:
-                logger.warning(f"⚠️ Channel message extraction failed: {e}")
+                logger.warning(f"âš ï¸ Channel message extraction failed: {e}")
                 user_results["limitations"].append(f"Channel messages: {str(e)}")
                 user_results["channel_messages"] = []
             
@@ -130,26 +128,25 @@ class ChatMessageExtractor:
             try:
                 space_messages = self._extract_space_messages(user_id, from_date, to_date)
                 user_results["space_messages"] = space_messages
-                logger.info(f"✅ Extracted {len(space_messages)} space messages")
+                logger.info(f"âœ… Extracted {len(space_messages)} space messages")
             except Exception as e:
-                logger.warning(f"⚠️ Space message extraction failed: {e}")
+                logger.warning(f"âš ï¸ Space message extraction failed: {e}")
                 user_results["limitations"].append(f"Space messages: {str(e)}")
                 user_results["space_messages"] = []
             
             
             # Calculate total
             user_results["total_messages"] = (
-                len(meeting_chats) + 
                 len(user_results["one_on_one_messages"]) +
                 len(user_results["group_messages"]) + 
                 len(user_results["channel_messages"]) +
                 len(user_results["space_messages"])
             )
             
-            logger.info(f"✅ Extracted {user_results['total_messages']} chat messages for {user_email}")
+            logger.info(f"âœ… Extracted {user_results['total_messages']} chat messages for {user_email}")
             
         except Exception as e:
-            logger.error(f"❌ Error extracting chat messages for {user_email}: {e}")
+            logger.error(f"âŒ Error extracting chat messages for {user_email}: {e}")
             user_results["error"] = str(e)
         
         return user_results
@@ -159,16 +156,16 @@ class ChatMessageExtractor:
         messages = []
         
         try:
-            logger.info(f"💬 Extracting one-on-one messages for user {user_id}")
+            logger.info(f"ðŸ’¬ Extracting one-on-one messages for user {user_id}")
             
             # First, get user's contacts
             contacts = self._get_user_contacts_official(user_id)
             
             if not contacts:
-                logger.warning(f"📭 No contacts found for user {user_id}")
+                logger.warning(f"ðŸ“­ No contacts found for user {user_id}")
                 return messages
             
-            logger.info(f"📋 Found {len(contacts)} contacts, checking for messages...")
+            logger.info(f"ðŸ“‹ Found {len(contacts)} contacts, checking for messages...")
             
             # Extract messages with each contact
             for contact in contacts:
@@ -176,7 +173,7 @@ class ChatMessageExtractor:
                 if not contact_id:
                     continue
                     
-                logger.debug(f"🔍 Checking messages with contact: {contact_id}")
+                logger.debug(f"ðŸ” Checking messages with contact: {contact_id}")
                 
                 url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
                 params = {
@@ -206,20 +203,20 @@ class ChatMessageExtractor:
                             break
                             
                     elif response.status_code == 404:
-                        logger.debug(f"📭 No messages found with contact {contact_id}")
+                        logger.debug(f"ðŸ“­ No messages found with contact {contact_id}")
                         break
                     else:
-                        logger.warning(f"⚠️ Failed to fetch messages with contact {contact_id}: {response.status_code}")
+                        logger.warning(f"âš ï¸ Failed to fetch messages with contact {contact_id}: {response.status_code}")
                         break
                 
                 if contact_messages:
-                    logger.info(f"💬 Found {len(contact_messages)} messages with contact: {contact_id}")
+                    logger.info(f"ðŸ’¬ Found {len(contact_messages)} messages with contact: {contact_id}")
                     messages.extend(contact_messages)
                     
         except Exception as e:
-            logger.error(f"❌ Error extracting one-on-one messages: {e}")
+            logger.error(f"âŒ Error extracting one-on-one messages: {e}")
         
-        logger.info(f"✅ Extracted {len(messages)} one-on-one messages")
+        logger.info(f"âœ… Extracted {len(messages)} one-on-one messages")
         return messages
     
     def _get_user_contacts(self, user_id: str) -> List[Dict]:
@@ -268,7 +265,7 @@ class ChatMessageExtractor:
         contacts = []
         
         try:
-            logger.info(f"📋 Getting contacts for user {user_id}")
+            logger.info(f"ðŸ“‹ Getting contacts for user {user_id}")
             
             # Use the official contacts endpoint
             url = "https://api.zoom.us/v2/chat/users/me/contacts"
@@ -290,23 +287,23 @@ class ChatMessageExtractor:
                     page_contacts = data.get("contacts", [])
                     contacts.extend(page_contacts)
                     
-                    logger.info(f"📥 Retrieved {len(page_contacts)} contacts from API")
+                    logger.info(f"ðŸ“¥ Retrieved {len(page_contacts)} contacts from API")
                     
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
                         break
                         
                 elif response.status_code == 404:
-                    logger.info(f"📭 No contacts found for user {user_id}")
+                    logger.info(f"ðŸ“­ No contacts found for user {user_id}")
                     break
                 else:
-                    logger.error(f"❌ Failed to fetch contacts: {response.status_code} - {response.text}")
+                    logger.error(f"âŒ Failed to fetch contacts: {response.status_code} - {response.text}")
                     break
                     
         except Exception as e:
-            logger.error(f"❌ Error getting contacts: {e}")
+            logger.error(f"âŒ Error getting contacts: {e}")
         
-        logger.info(f"✅ Found {len(contacts)} total contacts")
+        logger.info(f"âœ… Found {len(contacts)} total contacts")
         return contacts
     
     def _extract_messages_with_contact(self, user_id: str, contact: Dict, from_date: str, to_date: str) -> List[Dict]:
@@ -361,7 +358,7 @@ class ChatMessageExtractor:
         messages = []
         
         try:
-            logger.info(f"👥 Extracting group messages for user {user_id}")
+            logger.info(f"ðŸ‘¥ Extracting group messages for user {user_id}")
             
             # Get IM groups
             groups_url = f"https://api.zoom.us/v2/im/groups"
@@ -372,30 +369,30 @@ class ChatMessageExtractor:
                 groups_data = groups_response.json()
                 groups = groups_data.get("groups", [])
                 
-                logger.info(f"📊 Found {len(groups)} IM groups")
+                logger.info(f"ðŸ“Š Found {len(groups)} IM groups")
                 
                 for group in groups:
                     group_id = group.get("id")
                     group_name = group.get("name", "Unknown Group")
                     
                     if group_id:
-                        logger.info(f"🔍 Checking group: {group_name}")
+                        logger.info(f"ðŸ” Checking group: {group_name}")
                         group_messages = self._extract_group_messages_by_id(
                             group_id, from_date, to_date
                         )
                         if group_messages:
-                            logger.info(f"💬 Found {len(group_messages)} messages in group: {group_name}")
+                            logger.info(f"ðŸ’¬ Found {len(group_messages)} messages in group: {group_name}")
                         messages.extend(group_messages)
                         
             elif groups_response.status_code == 404:
-                logger.info(f"📭 No IM groups found")
+                logger.info(f"ðŸ“­ No IM groups found")
             else:
-                logger.error(f"❌ Failed to fetch IM groups: {groups_response.status_code} - {groups_response.text}")
+                logger.error(f"âŒ Failed to fetch IM groups: {groups_response.status_code} - {groups_response.text}")
                 
         except Exception as e:
-            logger.error(f"❌ Error extracting group messages: {e}")
+            logger.error(f"âŒ Error extracting group messages: {e}")
         
-        logger.info(f"✅ Extracted {len(messages)} group messages")
+        logger.info(f"âœ… Extracted {len(messages)} group messages")
         return messages
     
     def _extract_group_messages_by_id(self, group_id: str, from_date: str, to_date: str) -> List[Dict]:
@@ -444,7 +441,7 @@ class ChatMessageExtractor:
         messages = []
         
         try:
-            logger.info(f"📢 Extracting channel messages for user {user_id}")
+            logger.info(f"ðŸ“¢ Extracting channel messages for user {user_id}")
             
             # Get user's channels
             channels_url = f"https://api.zoom.us/v2/chat/users/{user_id}/channels"
@@ -455,30 +452,30 @@ class ChatMessageExtractor:
                 channels_data = channels_response.json()
                 channels = channels_data.get("channels", [])
                 
-                logger.info(f"📊 Found {len(channels)} channels")
+                logger.info(f"ðŸ“Š Found {len(channels)} channels")
                 
                 for channel in channels:
                     channel_id = channel.get("id")
                     channel_name = channel.get("name", "Unknown Channel")
                     
                     if channel_id:
-                        logger.info(f"🔍 Checking channel: {channel_name}")
+                        logger.info(f"ðŸ” Checking channel: {channel_name}")
                         channel_messages = self._extract_channel_messages_by_id(
                             channel_id, from_date, to_date
                         )
                         if channel_messages:
-                            logger.info(f"💬 Found {len(channel_messages)} messages in channel: {channel_name}")
+                            logger.info(f"ðŸ’¬ Found {len(channel_messages)} messages in channel: {channel_name}")
                         messages.extend(channel_messages)
                         
             elif channels_response.status_code == 404:
-                logger.info(f"📭 No channels found for user {user_id}")
+                logger.info(f"ðŸ“­ No channels found for user {user_id}")
             else:
-                logger.error(f"❌ Failed to fetch channels: {channels_response.status_code} - {channels_response.text}")
+                logger.error(f"âŒ Failed to fetch channels: {channels_response.status_code} - {channels_response.text}")
                 
         except Exception as e:
-            logger.error(f"❌ Error extracting channel messages: {e}")
+            logger.error(f"âŒ Error extracting channel messages: {e}")
         
-        logger.info(f"✅ Extracted {len(messages)} channel messages")
+        logger.info(f"âœ… Extracted {len(messages)} channel messages")
         return messages
     
     def _extract_space_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
@@ -486,7 +483,7 @@ class ChatMessageExtractor:
         messages = []
         
         try:
-            logger.info(f"🌌 Extracting space messages for user {user_id}")
+            logger.info(f"ðŸŒŒ Extracting space messages for user {user_id}")
             
             # Get all spaces
             spaces_url = f"https://api.zoom.us/v2/chat/spaces"
@@ -497,14 +494,14 @@ class ChatMessageExtractor:
                 spaces_data = spaces_response.json()
                 spaces = spaces_data.get("spaces", [])
                 
-                logger.info(f"📊 Found {len(spaces)} chat spaces")
+                logger.info(f"ðŸ“Š Found {len(spaces)} chat spaces")
                 
                 for space in spaces:
                     space_id = space.get("id")
                     space_name = space.get("name", "Unknown Space")
                     
                     if space_id:
-                        logger.info(f"🔍 Checking space: {space_name}")
+                        logger.info(f"ðŸ” Checking space: {space_name}")
                         # Get channels in this space
                         space_channels = self._get_space_channels(space_id)
                         
@@ -513,23 +510,23 @@ class ChatMessageExtractor:
                             channel_name = channel.get("name", "Unknown Channel")
                             
                             if channel_id:
-                                logger.info(f"  📢 Checking space channel: {channel_name}")
+                                logger.info(f"  ðŸ“¢ Checking space channel: {channel_name}")
                                 channel_messages = self._extract_channel_messages_by_id(
                                     channel_id, from_date, to_date
                                 )
                                 if channel_messages:
-                                    logger.info(f"  💬 Found {len(channel_messages)} messages in space channel: {channel_name}")
+                                    logger.info(f"  ðŸ’¬ Found {len(channel_messages)} messages in space channel: {channel_name}")
                                 messages.extend(channel_messages)
                         
             elif spaces_response.status_code == 404:
-                logger.info(f"📭 No chat spaces found")
+                logger.info(f"ðŸ“­ No chat spaces found")
             else:
-                logger.error(f"❌ Failed to fetch chat spaces: {spaces_response.status_code} - {spaces_response.text}")
+                logger.error(f"âŒ Failed to fetch chat spaces: {spaces_response.status_code} - {spaces_response.text}")
                 
         except Exception as e:
-            logger.error(f"❌ Error extracting space messages: {e}")
+            logger.error(f"âŒ Error extracting space messages: {e}")
         
-        logger.info(f"✅ Extracted {len(messages)} space messages")
+        logger.info(f"âœ… Extracted {len(messages)} space messages")
         return messages
     
     def _get_space_channels(self, space_id: str) -> List[Dict]:
@@ -607,318 +604,6 @@ class ChatMessageExtractor:
             "@" in receiver  # Email address indicates one-on-one
         )
     
-    def extract_meeting_chat_messages(self, user_id: str, user_email: str,
-                                    from_date: str, to_date: str) -> List[Dict]:
-        """Extract in-meeting chat messages from recordings"""
-        logger.info(f"🎥 Extracting meeting chat messages for {user_email}")
-        
-        meeting_chats = []
-        recordings_found = 0
-        chat_files_found = 0
-        
-        try:
-            # Get user's recordings to find chat files
-            recordings_url = f"https://api.zoom.us/v2/users/{user_id}/recordings"
-            params = {
-                "from": from_date,
-                "to": to_date,
-                "page_size": 30,
-                "include_trash": True  # Include trash recordings
-            }
-            
-            next_page_token = None
-            
-            while True:
-                if next_page_token:
-                    params["next_page_token"] = next_page_token
-                
-                self.rate_limiter.sleep(0)
-                response = requests.get(recordings_url, headers=self.auth_headers, params=params)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    meetings = data.get("meetings", [])
-                    recordings_found += len(meetings)
-                    
-                    logger.info(f"📊 Found {len(meetings)} meetings with recordings")
-                    
-                    for meeting in meetings:
-                        meeting_id = meeting.get("uuid")
-                        meeting_topic = meeting.get("topic", "Unknown Topic")
-                        start_time = meeting.get("start_time", "Unknown Time")
-                        
-                        logger.debug(f"🔍 Checking meeting: {meeting_topic} ({start_time})")
-                        
-                        if meeting_id:
-                            # Get detailed recording info
-                            recording_details = self._get_meeting_recording_details(meeting_id)
-                            if recording_details:
-                                chat_files = self._extract_chat_from_recording_files(
-                                    recording_details, user_email
-                                )
-                                if chat_files:
-                                    chat_files_found += len(chat_files)
-                                    logger.info(f"💬 Found {len(chat_files)} chat files in meeting: {meeting_topic}")
-                                meeting_chats.extend(chat_files)
-                    
-                    next_page_token = data.get("next_page_token")
-                    if not next_page_token:
-                        break
-                        
-                elif response.status_code == 404:
-                    logger.info(f"📭 No recordings found for user {user_email}")
-                    break
-                else:
-                    logger.error(f"❌ Failed to fetch recordings: {response.status_code} - {response.text}")
-                    break
-                    
-        except Exception as e:
-            logger.error(f"❌ Error extracting meeting chat messages: {e}")
-        
-        logger.info(f"📊 Meeting chat extraction summary:")
-        logger.info(f"   📹 Total recordings checked: {recordings_found}")
-        logger.info(f"   💬 Chat files found: {chat_files_found}")
-        logger.info(f"   📋 Total chat messages extracted: {len(meeting_chats)}")
-        
-        # Also check meetings where user was a participant (not just host)
-        participant_chats = self._extract_meeting_chat_as_participant(user_id, user_email, from_date, to_date)
-        meeting_chats.extend(participant_chats)
-        
-        # Debug: Show some sample recording data if available
-        if recordings_found > 0:
-            self._debug_show_sample_recordings(user_id, from_date, to_date)
-        
-        return meeting_chats
-    
-    def _extract_meeting_chat_as_participant(self, user_id: str, user_email: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract chat messages from meetings where user was a participant"""
-        logger.info(f"🎥 Checking meetings where {user_email} was a participant")
-        
-        participant_chats = []
-        
-        try:
-            # Get user's meeting history (participated meetings)
-            meetings_url = f"https://api.zoom.us/v2/users/{user_id}/meetings"
-            params = {
-                "from": from_date,
-                "to": to_date,
-                "page_size": 30,
-                "type": "past"  # Only past meetings
-            }
-            
-            next_page_token = None
-            
-            while True:
-                if next_page_token:
-                    params["next_page_token"] = next_page_token
-                
-                self.rate_limiter.sleep(0)
-                response = requests.get(meetings_url, headers=self.auth_headers, params=params)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    meetings = data.get("meetings", [])
-                    
-                    logger.info(f"📊 Found {len(meetings)} meetings where user was participant")
-                    
-                    for meeting in meetings:
-                        meeting_id = meeting.get("id")
-                        meeting_topic = meeting.get("topic", "Unknown Topic")
-                        
-                        if meeting_id:
-                            # Check if this meeting has recordings with chat
-                            recording_details = self._get_meeting_recording_details_by_id(meeting_id)
-                            if recording_details:
-                                chat_files = self._extract_chat_from_recording_files(
-                                    recording_details, user_email
-                                )
-                                if chat_files:
-                                    logger.info(f"💬 Found {len(chat_files)} chat files in participant meeting: {meeting_topic}")
-                                participant_chats.extend(chat_files)
-                    
-                    next_page_token = data.get("next_page_token")
-                    if not next_page_token:
-                        break
-                        
-                elif response.status_code == 404:
-                    logger.info(f"📭 No participant meetings found for user {user_email}")
-                    break
-                else:
-                    logger.error(f"❌ Failed to fetch participant meetings: {response.status_code}")
-                    break
-                    
-        except Exception as e:
-            logger.error(f"❌ Error extracting participant meeting chat messages: {e}")
-        
-        return participant_chats
-    
-    def _debug_show_sample_recordings(self, user_id: str, from_date: str, to_date: str):
-        """Debug method to show sample recording data"""
-        try:
-            logger.info("🔍 Debug: Checking sample recording files...")
-            
-            recordings_url = f"https://api.zoom.us/v2/users/{user_id}/recordings"
-            params = {
-                "from": from_date,
-                "to": to_date,
-                "page_size": 5,  # Just get a few samples
-                "include_trash": True
-            }
-            
-            self.rate_limiter.sleep(0)
-            response = requests.get(recordings_url, headers=self.auth_headers, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                meetings = data.get("meetings", [])
-                
-                for i, meeting in enumerate(meetings[:3]):  # Show first 3 meetings
-                    meeting_id = meeting.get("uuid")
-                    topic = meeting.get("topic", "Unknown")
-                    start_time = meeting.get("start_time", "Unknown")
-                    
-                    logger.info(f"🔍 Sample meeting {i+1}: {topic} ({start_time})")
-                    
-                    if meeting_id:
-                        recording_details = self._get_meeting_recording_details(meeting_id)
-                        if recording_details:
-                            files = recording_details.get("recording_files", [])
-                            logger.info(f"   📁 Recording files ({len(files)}):")
-                            
-                            for file_info in files:
-                                file_name = file_info.get("file_name", "Unknown")
-                                file_type = file_info.get("file_type", "Unknown")
-                                file_size = file_info.get("file_size", 0)
-                                logger.info(f"     - {file_name} | Type: {file_type} | Size: {file_size}")
-                        else:
-                            logger.info(f"   ❌ No recording details available")
-                    else:
-                        logger.info(f"   ❌ No meeting ID available")
-                        
-        except Exception as e:
-            logger.error(f"Error in debug method: {e}")
-    
-    def _get_meeting_recording_details_by_id(self, meeting_id: str) -> Optional[Dict]:
-        """Get detailed recording information for a meeting by ID"""
-        try:
-            url = f"https://api.zoom.us/v2/meetings/{meeting_id}/recordings"
-            self.rate_limiter.sleep(0)
-            response = requests.get(url, headers=self.auth_headers)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.debug(f"No recording details for meeting ID {meeting_id}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error getting recording details by ID: {e}")
-            return None
-    
-    def _get_meeting_recording_details(self, meeting_uuid: str) -> Optional[Dict]:
-        """Get detailed recording information for a meeting"""
-        try:
-            url = f"https://api.zoom.us/v2/meetings/{meeting_uuid}/recordings"
-            self.rate_limiter.sleep(0)
-            response = requests.get(url, headers=self.auth_headers)
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.debug(f"No recording details for meeting {meeting_uuid}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error getting recording details: {e}")
-            return None
-    
-    def _extract_chat_from_recording_files(self, recording_data: Dict, user_email: str) -> List[Dict]:
-        """Extract chat messages from recording files"""
-        chat_messages = []
-        
-        try:
-            files = recording_data.get("recording_files", [])
-            logger.debug(f"🔍 Checking {len(files)} recording files for chat data")
-            
-            for file_info in files:
-                file_type = file_info.get("file_type", "").lower()
-                file_name = file_info.get("file_name", "").lower()
-                file_size = file_info.get("file_size", 0)
-                
-                logger.debug(f"📄 File: {file_name} | Type: {file_type} | Size: {file_size}")
-                
-                # Check for chat files - be more comprehensive
-                is_chat_file = (
-                    file_type == "chat" or 
-                    file_type == "txt" or  # Chat files are often saved as .txt
-                    "chat" in file_name or
-                    "message" in file_name or
-                    file_name.endswith(".txt") or  # Chat files are typically .txt
-                    file_name.endswith(".json")    # Sometimes chat is in JSON format
-                )
-                
-                if is_chat_file and file_size > 0:  # Only process non-empty files
-                    logger.info(f"💬 Found potential chat file: {file_info.get('file_name')} ({file_size} bytes)")
-                    
-                    # Try to download and parse the chat file
-                    chat_content = self._download_and_parse_chat_file(file_info)
-                    
-                    chat_info = {
-                        "meeting_uuid": recording_data.get("uuid"),
-                        "meeting_id": recording_data.get("id"),
-                        "topic": recording_data.get("topic"),
-                        "start_time": recording_data.get("start_time"),
-                        "chat_file": file_info,
-                        "chat_content": chat_content,
-                        "extracted_by": user_email,
-                        "extraction_date": datetime.now().isoformat()
-                    }
-                    chat_messages.append(chat_info)
-                    
-        except Exception as e:
-            logger.error(f"❌ Error extracting chat from recording files: {e}")
-        
-        return chat_messages
-    
-    def _download_and_parse_chat_file(self, file_info: Dict) -> Optional[Dict]:
-        """Download and parse a chat file"""
-        try:
-            download_url = file_info.get("download_url")
-            if not download_url:
-                logger.debug("No download URL available for chat file")
-                return None
-            
-            self.rate_limiter.sleep(0)
-            response = requests.get(download_url, headers=self.auth_headers)
-            
-            if response.status_code == 200:
-                content = response.text
-                
-                # Try to parse as JSON first
-                try:
-                    json_content = json.loads(content)
-                    logger.debug(f"📄 Parsed chat file as JSON: {len(content)} characters")
-                    return {
-                        "format": "json",
-                        "content": json_content,
-                        "raw_size": len(content)
-                    }
-                except json.JSONDecodeError:
-                    # Not JSON, treat as plain text
-                    logger.debug(f"📄 Parsed chat file as text: {len(content)} characters")
-                    return {
-                        "format": "text",
-                        "content": content,
-                        "raw_size": len(content)
-                    }
-            else:
-                logger.warning(f"Failed to download chat file: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error downloading/parsing chat file: {e}")
-            return None
-    
     def save_user_chat_data(self, user_email: str, chat_data: Dict):
         """Save chat data for a user to files"""
         try:
@@ -949,18 +634,14 @@ class ChatMessageExtractor:
                 with open(space_file, 'w', encoding='utf-8') as f:
                     json.dump(chat_data["space_messages"], f, indent=2, ensure_ascii=False)
             
-            # Save meeting chat messages
-            if chat_data.get("meeting_chat_messages"):
-                meeting_file = self.output_dir / "meeting_chats" / f"{safe_email}_meetings.json"
-                with open(meeting_file, 'w', encoding='utf-8') as f:
-                    json.dump(chat_data["meeting_chat_messages"], f, indent=2, ensure_ascii=False)
+            # Skip saving meeting chat messages - handled elsewhere
             
             # Save summary
             summary_file = self.output_dir / "_metadata" / f"{safe_email}_chat_summary.json"
             with open(summary_file, 'w', encoding='utf-8') as f:
                 json.dump(chat_data, f, indent=2, ensure_ascii=False)
                 
-            logger.info(f"💾 Saved chat data for {user_email}")
+            logger.info(f"ðŸ’¾ Saved chat data for {user_email}")
             
         except Exception as e:
             logger.error(f"Error saving chat data for {user_email}: {e}")
@@ -976,20 +657,20 @@ def extract_all_chat_messages(
 ):
     """Main function to extract all chat messages"""
     
-    logger.info("🚀 Starting Zoom Chat Messages Extraction")
-    logger.info(f"📁 Output Directory: {output_dir}")
-    logger.info(f"📅 Date Range: {from_date} to {to_date or datetime.now().strftime('%Y-%m-%d')}")
+    logger.info("ðŸš€ Starting Zoom Chat Messages Extraction")
+    logger.info(f"ðŸ“ Output Directory: {output_dir}")
+    logger.info(f"ðŸ“… Date Range: {from_date} to {to_date or datetime.now().strftime('%Y-%m-%d')}")
     
     if dry_run:
-        logger.info("🧪 DRY RUN MODE - No data will be extracted")
+        logger.info("ðŸ§ª DRY RUN MODE - No data will be extracted")
     
     # Initialize authentication
     try:
         auth = get_auth_from_env()
         auth_headers = auth.get_auth_headers()
-        logger.info("✅ Authentication successful")
+        logger.info("âœ… Authentication successful")
     except Exception as e:
-        logger.error(f"❌ Authentication failed: {e}")
+        logger.error(f"âŒ Authentication failed: {e}")
         return False
     
     # Initialize extractor
@@ -1002,71 +683,71 @@ def extract_all_chat_messages(
     all_users = []
     
     if user_filter:
-        logger.info(f"👥 Processing filtered users: {user_filter}")
+        logger.info(f"ðŸ‘¥ Processing filtered users: {user_filter}")
         
         # Get active users
-        print("📋 Getting active users...")
+        print("ðŸ“‹ Getting active users...")
         try:
             active_users = list(user_enumerator.list_all_users(user_filter, user_type="active"))
             all_users.extend(active_users)
             print(f"   Found {len(active_users)} active users")
         except Exception as e:
-            print(f"   ⚠️  Could not get active users: {e}")
+            print(f"   âš ï¸  Could not get active users: {e}")
         
         # Get inactive users if requested
         if include_inactive_users:
-            print("📋 Getting inactive users...")
+            print("ðŸ“‹ Getting inactive users...")
             try:
                 inactive_users = list(user_enumerator.list_all_users(user_filter, user_type="inactive"))
                 all_users.extend(inactive_users)
                 print(f"   Found {len(inactive_users)} inactive users")
             except Exception as e:
-                print(f"   ⚠️  Could not get inactive users: {e}")
+                print(f"   âš ï¸  Could not get inactive users: {e}")
         
         # Get pending users if requested
-        print("📋 Getting pending users...")
+        print("ðŸ“‹ Getting pending users...")
         try:
             pending_users = list(user_enumerator.list_all_users(user_filter, user_type="pending"))
             all_users.extend(pending_users)
             print(f"   Found {len(pending_users)} pending users")
         except Exception as e:
-            print(f"   ⚠️  Could not get pending users: {e}")
+            print(f"   âš ï¸  Could not get pending users: {e}")
             
     else:
-        logger.info("👥 Processing all users")
+        logger.info("ðŸ‘¥ Processing all users")
         
         # Get active users
-        print("📋 Getting active users...")
+        print("ðŸ“‹ Getting active users...")
         try:
             active_users = list(user_enumerator.list_all_users(user_type="active"))
             all_users.extend(active_users)
             print(f"   Found {len(active_users)} active users")
         except Exception as e:
-            print(f"   ⚠️  Could not get active users: {e}")
+            print(f"   âš ï¸  Could not get active users: {e}")
         
         # Get inactive users if requested
         if include_inactive_users:
-            print("📋 Getting inactive users...")
+            print("ðŸ“‹ Getting inactive users...")
             try:
                 inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
                 all_users.extend(inactive_users)
                 print(f"   Found {len(inactive_users)} inactive users")
             except Exception as e:
-                print(f"   ⚠️  Could not get inactive users: {e}")
+                print(f"   âš ï¸  Could not get inactive users: {e}")
         
         # Get pending users if requested
-        print("📋 Getting pending users...")
+        print("ðŸ“‹ Getting pending users...")
         try:
             pending_users = list(user_enumerator.list_all_users(user_type="pending"))
             all_users.extend(pending_users)
             print(f"   Found {len(pending_users)} pending users")
         except Exception as e:
-            print(f"   ⚠️  Could not get pending users: {e}")
+            print(f"   âš ï¸  Could not get pending users: {e}")
     
-    logger.info(f"🎯 Found {len(all_users)} users to process")
+    logger.info(f"ðŸŽ¯ Found {len(all_users)} users to process")
     
     if dry_run:
-        logger.info("🧪 DRY RUN: Would extract chat messages for:")
+        logger.info("ðŸ§ª DRY RUN: Would extract chat messages for:")
         for i, user in enumerate(all_users[:10], 1):  # Show first 10
             logger.info(f"  {i}. {user.get('email')} ({user.get('id')})")
         if len(all_users) > 10:
@@ -1082,10 +763,10 @@ def extract_all_chat_messages(
         user_id = user.get("id")
         
         if not user_email or not user_id:
-            logger.warning(f"⚠️ Skipping user {i} - missing email or ID")
+            logger.warning(f"âš ï¸ Skipping user {i} - missing email or ID")
             continue
         
-        logger.info(f"👤 [{i}/{len(all_users)}] Processing {user_email}")
+        logger.info(f"ðŸ‘¤ [{i}/{len(all_users)}] Processing {user_email}")
         
         try:
             # Extract chat messages
@@ -1108,7 +789,7 @@ def extract_all_chat_messages(
             processed_users += 1
             
         except Exception as e:
-            logger.error(f"❌ Error processing user {user_email}: {e}")
+            logger.error(f"âŒ Error processing user {user_email}: {e}")
             continue
     
     # Save extraction summary
@@ -1125,11 +806,11 @@ def extract_all_chat_messages(
     with open(summary_file, 'w', encoding='utf-8') as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
     
-    logger.info("🎉 Chat Messages Extraction Complete!")
-    logger.info(f"📊 Summary:")
-    logger.info(f"  👥 Users processed: {processed_users}/{len(all_users)}")
-    logger.info(f"  💬 Total messages: {total_messages}")
-    logger.info(f"  📁 Output directory: {extractor.output_dir}")
+    logger.info("ðŸŽ‰ Chat Messages Extraction Complete!")
+    logger.info(f"ðŸ“Š Summary:")
+    logger.info(f"  ðŸ‘¥ Users processed: {processed_users}/{len(all_users)}")
+    logger.info(f"  ðŸ’¬ Total messages: {total_messages}")
+    logger.info(f"  ðŸ“ Output directory: {extractor.output_dir}")
     
     return True
 
@@ -1200,7 +881,7 @@ Examples:
     
     # Validate arguments
     if not args.user_filter and not args.all_users:
-        logger.error("❌ Please specify either --user-filter or --all-users")
+        logger.error("âŒ Please specify either --user-filter or --all-users")
         return 1
     
     try:
@@ -1217,10 +898,10 @@ Examples:
         return 0 if success else 1
         
     except KeyboardInterrupt:
-        logger.info("🛑 Extraction interrupted by user")
+        logger.info("ðŸ›‘ Extraction interrupted by user")
         return 1
     except Exception as e:
-        logger.error(f"❌ Unexpected error: {e}")
+        logger.error(f"âŒ Unexpected error: {e}")
         return 1
 
 if __name__ == "__main__":
