@@ -448,7 +448,7 @@ class ImprovedChatExtractor:
                 if channel_folder_name:
                     file_path = self.output_dir / channel_folder_name / f"{file_id}_{safe_filename}"
                 else:
-                file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
+                    file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
                 
                 # Ensure directory exists
                 file_path.parent.mkdir(parents=True, exist_ok=True)
