@@ -54,7 +54,46 @@ class ImprovedChatExtractor:
         (self.output_dir / "files").mkdir(exist_ok=True)
         (self.output_dir / "_metadata").mkdir(exist_ok=True)
         
+        # Progress tracking file
+        self.progress_file = self.output_dir / "_metadata" / "extraction_progress.json"
+        
         logger.info(f"Chat extraction output: {self.output_dir}")
+    
+    def load_progress(self) -> Dict[str, Any]:
+        """Load extraction progress from file"""
+        try:
+            if self.progress_file.exists():
+                with open(self.progress_file, 'r', encoding='utf-8') as f:
+                    progress = json.load(f)
+                logger.info(f"Loaded progress: {len(progress.get('completed_channels', []))} completed, {len(progress.get('failed_channels', []))} failed")
+                return progress
+            else:
+                return {
+                    "extraction_started": datetime.now().isoformat(),
+                    "completed_channels": [],
+                    "failed_channels": [],
+                    "total_channels": 0,
+                    "success_count": 0,
+                    "failure_count": 0
+                }
+        except Exception as e:
+            logger.error(f"Error loading progress: {e}")
+            return {
+                "extraction_started": datetime.now().isoformat(),
+                "completed_channels": [],
+                "failed_channels": [],
+                "total_channels": 0,
+                "success_count": 0,
+                "failure_count": 0
+            }
+    
+    def save_progress(self, progress: Dict[str, Any]):
+        """Save extraction progress to file"""
+        try:
+            with open(self.progress_file, 'w', encoding='utf-8') as f:
+                json.dump(progress, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error saving progress: {e}")
     
     def refresh_auth_headers(self):
         """Refresh authentication headers if token has expired"""
@@ -409,7 +448,7 @@ class ImprovedChatExtractor:
                 if channel_folder_name:
                     file_path = self.output_dir / channel_folder_name / f"{file_id}_{safe_filename}"
                 else:
-                    file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
+                file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
                 
                 # Ensure directory exists
                 file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -486,7 +525,7 @@ class ImprovedChatExtractor:
         if days >= 365:  # If looking back more than a year, start from 2020
             from_date = "2020-01-01T00:00:00Z"
         else:
-            from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
+        from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
         
         logger.info(f"Extracting messages from channel '{channel_name}' ({channel_id})")
         logger.info(f"Date range: {from_date} to {to_date}")
@@ -689,10 +728,17 @@ class ImprovedChatExtractor:
         return result
     
     def extract_all_unique_channels(self, days: int = 30, download_files: bool = True,
-                                  include_inactive: bool = True, extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
+                                  include_inactive: bool = True, extractor_user: str = "me", debug: bool = False, resume: bool = False) -> Dict[str, Any]:
         """Extract messages from all unique channels (no duplicates)"""
         
         logger.info("Starting comprehensive chat extraction for all unique channels")
+        
+        # Load progress if resuming
+        progress = self.load_progress() if resume else None
+        if resume and progress:
+            logger.info(f"🔄 Resuming extraction from previous session")
+            logger.info(f"   Completed: {progress.get('success_count', 0)} channels")
+            logger.info(f"   Failed: {progress.get('failure_count', 0)} channels")
         
         # Get all unique channels
         unique_channels = self.get_all_unique_channels(include_inactive)
@@ -706,6 +752,17 @@ class ImprovedChatExtractor:
         with open(channels_file, 'w', encoding='utf-8') as f:
             json.dump(unique_channels, f, indent=2, ensure_ascii=False)
         
+        # Initialize progress tracking
+        if not progress:
+            progress = {
+                "extraction_started": datetime.now().isoformat(),
+                "completed_channels": [],
+                "failed_channels": [],
+                "total_channels": len(unique_channels),
+                "success_count": 0,
+                "failure_count": 0
+            }
+        
         logger.info(f"Processing {len(unique_channels)} unique channels")
         
         # Extract messages from each unique channel
@@ -717,6 +774,15 @@ class ImprovedChatExtractor:
             channel_id = channel.get("id")
             channel_name = channel.get("name", "Unknown")
             accessible_users = channel.get("accessible_by_users", [])
+            
+            # Check if this channel was already processed (for resume functionality)
+            if resume and progress:
+                if channel_id in [c.get("channel_id") for c in progress.get("completed_channels", [])]:
+                    logger.info(f"⏭️  Skipping already completed channel: {channel_name}")
+                    continue
+                if channel_id in [c.get("channel_id") for c in progress.get("failed_channels", [])]:
+                    logger.info(f"⏭️  Skipping previously failed channel: {channel_name}")
+                    continue
             
             # Try to get better channel details using our improved method
             if channel_name == "Unknown" or not channel_name:
@@ -743,13 +809,55 @@ class ImprovedChatExtractor:
                     debug=debug
                 )
                 
+                message_count = result.get("message_count", 0)
+                
+                # Track success/failure based on message count
+                if message_count > 0:
+                    # SUCCESS: Messages were retrieved
+                    logger.info(f"✅ SUCCESS: {channel_name} - {message_count} messages extracted")
+                    progress["success_count"] += 1
+                    progress["completed_channels"].append({
+                        "channel_id": channel_id,
+                        "channel_name": channel_name,
+                        "message_count": message_count,
+                        "files_count": len(result.get("downloaded_files", [])),
+                        "completed_at": datetime.now().isoformat(),
+                        "extractor_user": extractor_user
+                    })
+                else:
+                    # FAILURE: No messages retrieved
+                    logger.warning(f"❌ FAILURE: {channel_name} - 0 messages extracted")
+                    progress["failure_count"] += 1
+                    progress["failed_channels"].append({
+                        "channel_id": channel_id,
+                        "channel_name": channel_name,
+                        "reason": "No messages found",
+                        "failed_at": datetime.now().isoformat(),
+                        "extractor_user": extractor_user
+                    })
+                
+                # Save progress after each channel
+                self.save_progress(progress)
+                
                 result["accessible_by_users"] = accessible_users
                 results.append(result)
-                total_messages += result.get("message_count", 0)
+                total_messages += message_count
                 total_files += len(result.get("downloaded_files", []))
                 
             except Exception as e:
-                logger.error(f"Error processing channel {channel_name}: {e}")
+                # FAILURE: Exception occurred
+                logger.error(f"❌ FAILURE: {channel_name} - Exception: {e}")
+                progress["failure_count"] += 1
+                progress["failed_channels"].append({
+                    "channel_id": channel_id,
+                    "channel_name": channel_name,
+                    "reason": f"Exception: {str(e)}",
+                    "failed_at": datetime.now().isoformat(),
+                    "extractor_user": extractor_user
+                })
+                
+                # Save progress after each channel
+                self.save_progress(progress)
                 continue
         
         # Create overall summary
@@ -764,7 +872,12 @@ class ImprovedChatExtractor:
             "download_files": download_files,
             "extractor_user": extractor_user,
             "channels_file": str(channels_file),
-            "results": results
+            "resume_mode": resume,
+            "success_count": progress["success_count"],
+            "failure_count": progress["failure_count"],
+            "success_rate": f"{(progress['success_count'] / len(unique_channels) * 100):.1f}%" if len(unique_channels) > 0 else "0%",
+            "results": results,
+            "progress_tracking": progress
         }
         
         # Save summary
@@ -774,6 +887,9 @@ class ImprovedChatExtractor:
         
         logger.info(f"Unique channels extraction complete!")
         logger.info(f"Processed {len(results)}/{len(unique_channels)} channels")
+        logger.info(f"✅ SUCCESS: {progress['success_count']} channels with messages")
+        logger.info(f"❌ FAILURE: {progress['failure_count']} channels with no messages")
+        logger.info(f"📊 Success Rate: {(progress['success_count'] / len(unique_channels) * 100):.1f}%")
         logger.info(f"Total messages: {total_messages}")
         logger.info(f"Total files: {total_files}")
         
@@ -797,18 +913,18 @@ class ImprovedChatExtractor:
                 logger.info(f"Found channel: {channel_name}")
             else:
                 # Fallback: Check if we have the channels file from a previous run
-                channels_file = self.output_dir / "channels" / "all_unique_channels.json"
-                if channels_file.exists():
-                    with open(channels_file, 'r', encoding='utf-8') as f:
-                        all_channels = json.load(f)
-                    
-                    # Find the channel in the list
-                    for channel in all_channels:
-                        if channel.get("id") == channel_id:
-                            channel_info = channel
-                            channel_name = channel.get("name", "Unknown")
+            channels_file = self.output_dir / "channels" / "all_unique_channels.json"
+            if channels_file.exists():
+                with open(channels_file, 'r', encoding='utf-8') as f:
+                    all_channels = json.load(f)
+                
+                # Find the channel in the list
+                for channel in all_channels:
+                    if channel.get("id") == channel_id:
+                        channel_info = channel
+                        channel_name = channel.get("name", "Unknown")
                             logger.info(f"Found channel in cache: {channel_name}")
-                            break
+                        break
             
             # Debug: Log detailed channel information
             if debug and channel_info:
@@ -857,7 +973,8 @@ def main():
     @click.option('--list-channels', is_flag=True, help='Just list unique channels and exit')
     @click.option('--channel-id', help='Extract messages from a specific channel ID only')
     @click.option('--debug', is_flag=True, help='Enable debug logging for detailed API information')
-    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, debug):
+    @click.option('--resume', is_flag=True, help='Resume extraction from where it left off (skips already processed channels)')
+    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, debug, resume):
         """Improved Simple Zoom Chat Extractor - No Duplicate Channels"""
         
         # Set debug logging level if requested
@@ -908,7 +1025,8 @@ def main():
                     download_files=download_files,
                     include_inactive=include_inactive,
                     extractor_user=extractor_user,
-                    debug=debug
+                    debug=debug,
+                    resume=resume
                 )
             
             logger.info("Extraction completed successfully!")
