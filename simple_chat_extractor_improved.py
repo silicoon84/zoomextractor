@@ -260,23 +260,39 @@ class ImprovedChatExtractor:
                 self.rate_limiter.sleep(0)
                 response = self.make_api_request(url, params)
                 
+                # Debug: Log the full API request details
+                logger.debug(f"API Request: {url}")
+                logger.debug(f"API Params: {params}")
+                logger.debug(f"API Response Status: {response.status_code}")
+                logger.debug(f"API Response Headers: {dict(response.headers)}")
+                
                 if response.status_code == 200:
                     data = response.json()
                     page_messages = data.get("messages", [])
                     messages.extend(page_messages)
                     
+                    # Debug: Log detailed response info
+                    logger.info(f"API Response: Found {len(page_messages)} messages in this page")
+                    logger.debug(f"Full API Response: {json.dumps(data, indent=2)}")
+                    
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
+                        logger.info(f"Reached end of messages (no more pages)")
                         break
+                    else:
+                        logger.info(f"More pages available, continuing...")
                         
                 elif response.status_code == 404:
-                    logger.info(f"No messages found")
+                    logger.info(f"No messages found (404 - endpoint not found)")
+                    logger.debug(f"Response body: {response.text}")
                     break
                 elif response.status_code == 400 and "No permission to access" in response.text:
                     logger.warning(f"No permission to access messages for user {user_id} - channel may be restricted")
+                    logger.debug(f"Response body: {response.text}")
                     break
                 else:
                     logger.error(f"Failed to get messages: {response.status_code} - {response.text}")
+                    logger.debug(f"Full response: {response.text}")
                     break
                     
         except Exception as e:
@@ -319,7 +335,7 @@ class ImprovedChatExtractor:
             return None
     
     def extract_channel_messages(self, channel_id: str, channel_name: str, channel_info: Dict = None, 
-                               days: int = 30, download_files: bool = True, extractor_user: str = "me") -> Dict[str, Any]:
+                               days: int = 30, download_files: bool = True, extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
         """Extract messages from a specific channel using a single user"""
         
         # Calculate date range
@@ -334,6 +350,17 @@ class ImprovedChatExtractor:
         channel_type = channel_info.get("type", "group") if channel_info else "group"
         
         logger.info(f"Extracting messages using to_channel parameter (type: {channel_type})")
+        
+        # Debug: Show more details about the channel and extraction parameters
+        if debug:
+            logger.debug(f"Channel ID: {channel_id}")
+            logger.debug(f"Channel Name: {channel_name}")
+            logger.debug(f"Channel Type: {channel_type}")
+            logger.debug(f"Extractor User: {extractor_user}")
+            logger.debug(f"Download Files: {download_files}")
+            logger.debug(f"Days to look back: {days}")
+            if channel_info:
+                logger.debug(f"Full channel info: {json.dumps(channel_info, indent=2)}")
         
         # For all channels, use to_channel parameter
         messages = self.get_messages(
@@ -455,7 +482,7 @@ class ImprovedChatExtractor:
         return summary
     
     def extract_single_channel(self, channel_id: str, days: int = 30, download_files: bool = True,
-                              extractor_user: str = "me") -> Dict[str, Any]:
+                              extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
         """Extract messages from a single channel by ID"""
         
         logger.info(f"Extracting messages from single channel: {channel_id}")
@@ -480,6 +507,12 @@ class ImprovedChatExtractor:
             
             logger.info(f"Found channel: {channel_name}")
             
+            # Debug: Log detailed channel information
+            if debug:
+                logger.debug(f"Channel details: {json.dumps(channel_info, indent=2)}")
+                logger.debug(f"Channel type: {channel_info.get('type', 'unknown')}")
+                logger.debug(f"Channel settings: {channel_info.get('settings', {})}")
+            
         except Exception as e:
             logger.warning(f"Could not load channel info: {e}")
         
@@ -490,7 +523,8 @@ class ImprovedChatExtractor:
             channel_info=channel_info,
             days=days,
             download_files=download_files,
-            extractor_user=extractor_user
+            extractor_user=extractor_user,
+            debug=debug
         )
         
         # Save single channel result
@@ -519,8 +553,14 @@ def main():
     @click.option('--no-inactive', is_flag=True, help='Skip inactive users when collecting channels')
     @click.option('--list-channels', is_flag=True, help='Just list unique channels and exit')
     @click.option('--channel-id', help='Extract messages from a specific channel ID only')
-    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id):
+    @click.option('--debug', is_flag=True, help='Enable debug logging for detailed API information')
+    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, debug):
         """Improved Simple Zoom Chat Extractor - No Duplicate Channels"""
+        
+        # Set debug logging level if requested
+        if debug:
+            logging.getLogger().setLevel(logging.DEBUG)
+            logger.info("Debug logging enabled - detailed API information will be shown")
         
         # Initialize authentication
         try:
@@ -555,7 +595,8 @@ def main():
                     channel_id=channel_id,
                     days=days,
                     download_files=download_files,
-                    extractor_user=extractor_user
+                    extractor_user=extractor_user,
+                    debug=debug
                 )
             else:
                 # Extract from all unique channels
