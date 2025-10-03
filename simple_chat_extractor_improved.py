@@ -302,7 +302,7 @@ class ImprovedChatExtractor:
         
         return messages
     
-    def download_file(self, file_info: Dict) -> Optional[str]:
+    def download_file(self, file_info: Dict, channel_folder_name: str = None) -> Optional[str]:
         """Download a file attachment"""
         try:
             download_url = file_info.get("download_url")
@@ -321,7 +321,15 @@ class ImprovedChatExtractor:
             if response.status_code == 200:
                 # Create safe filename
                 safe_filename = "".join(c for c in file_name if c.isalnum() or c in ('.', '-', '_')).strip()
-                file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
+                
+                # Use channel-specific folder if provided
+                if channel_folder_name:
+                    file_path = self.output_dir / "files" / channel_folder_name / f"{file_id}_{safe_filename}"
+                else:
+                    file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
+                
+                # Ensure directory exists
+                file_path.parent.mkdir(parents=True, exist_ok=True)
                 
                 with open(file_path, 'wb') as f:
                     f.write(response.content)
@@ -335,6 +343,56 @@ class ImprovedChatExtractor:
         except Exception as e:
             logger.error(f"Error downloading file: {e}")
             return None
+    
+    def _create_human_readable_export(self, messages: List[Dict], output_file: Path):
+        """Create a human-readable text export of messages"""
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(f"Zoom Chat Messages Export\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Total Messages: {len(messages)}\n")
+                f.write("=" * 80 + "\n\n")
+                
+                for message in messages:
+                    # Extract message details
+                    date_time = message.get('date_time', 'Unknown')
+                    sender = message.get('sender', 'Unknown')
+                    message_text = message.get('message', '')
+                    
+                    # Handle different sender formats
+                    if isinstance(sender, dict):
+                        sender_name = sender.get('display_name', sender.get('email', 'Unknown'))
+                    else:
+                        sender_name = sender
+                    
+                    # Format date/time
+                    try:
+                        if date_time and date_time != 'Unknown':
+                            # Parse ISO format and format nicely
+                            dt = datetime.fromisoformat(date_time.replace('Z', '+00:00'))
+                            formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            formatted_time = 'Unknown Time'
+                    except:
+                        formatted_time = str(date_time) if date_time else 'Unknown Time'
+                    
+                    # Write message line
+                    f.write(f"{formatted_time} : {sender_name} : {message_text}\n")
+                    
+                    # Add file information if present
+                    files = message.get('files', [])
+                    if files:
+                        for file_info in files:
+                            file_name = file_info.get('file_name', 'Unknown file')
+                            f.write(f"  📎 File: {file_name}\n")
+                    
+                    # Add line break between messages
+                    f.write("\n")
+            
+            logger.info(f"Created human-readable export: {output_file}")
+            
+        except Exception as e:
+            logger.error(f"Error creating human-readable export: {e}")
     
     def extract_channel_messages(self, channel_id: str, channel_name: str, channel_info: Dict = None, 
                                days: int = 30, download_files: bool = True, extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
@@ -483,22 +541,40 @@ class ImprovedChatExtractor:
         else:
             logger.info(f"Successfully extracted {len(messages)} messages using primary method")
         
-        # Download files if requested
+        # Download files if requested (before creating folder structure)
         downloaded_files = []
-        if download_files:
+        if download_files and messages:
+            # Create safe channel name for folder
+            safe_channel_name = "".join(c for c in channel_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_channel_name = safe_channel_name.replace(' ', '_')[:30]
+            channel_folder_name = f"channel_{channel_id}_{safe_channel_name}"
+            
             for message in messages:
                 files = message.get("files", [])
                 for file_info in files:
-                    file_path = self.download_file(file_info)
+                    file_path = self.download_file(file_info, channel_folder_name)
                     if file_path:
                         downloaded_files.append(file_path)
         
-        # Save messages
+        # Create channel-specific folder structure
         safe_channel_name = "".join(c for c in channel_name if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_channel_name = safe_channel_name.replace(' ', '_')[:30]  # Limit length
-        messages_file = self.output_dir / "messages" / f"channel_{channel_id}_{safe_channel_name}_messages.json"
+        channel_folder_name = f"channel_{channel_id}_{safe_channel_name}"
+        
+        # Create channel-specific directories
+        channel_messages_dir = self.output_dir / "messages" / channel_folder_name
+        channel_files_dir = self.output_dir / "files" / channel_folder_name
+        channel_messages_dir.mkdir(parents=True, exist_ok=True)
+        channel_files_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save messages JSON
+        messages_file = channel_messages_dir / "messages.json"
         with open(messages_file, 'w', encoding='utf-8') as f:
             json.dump(messages, f, indent=2, ensure_ascii=False)
+        
+        # Create human-readable text file
+        text_file = channel_messages_dir / "messages.txt"
+        self._create_human_readable_export(messages, text_file)
         
         result = {
             "channel_id": channel_id,
@@ -507,6 +583,8 @@ class ImprovedChatExtractor:
             "downloaded_files": downloaded_files,
             "date_range": f"{from_date} to {to_date}",
             "messages_file": str(messages_file),
+            "text_file": str(text_file),
+            "channel_folder": channel_folder_name,
             "extractor_user": extractor_user
         }
         
