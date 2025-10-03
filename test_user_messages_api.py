@@ -383,8 +383,11 @@ def main():
     try:
         tester = UserMessagesAPITester()
         
-        # Test with the specific channel from your example
-        channel_id = "d6c65e4872704eaf8b859c8bd5adc5ed"  # NAIDOC Week channel
+        # Test with the specific channels from your examples
+        channel_ids = [
+            "d6c65e4872704eaf8b859c8bd5adc5ed",  # NAIDOC Week channel
+            "c094a68f1d1a4a14a681ff411b66daf3"   # Anzac Day ceremony channel
+        ]
         
         print("\n" + "="*80)
         print("🧪 TESTING ZOOM CHAT MESSAGES API")
@@ -394,27 +397,43 @@ def main():
         print("\n1️⃣  Testing basic /chat/users/me/messages endpoint:")
         basic_results = tester.test_user_messages_endpoint(user_id="me")
         
-        # Test 2: Channel-specific extraction
-        print(f"\n2️⃣  Testing channel-specific extraction for: {channel_id}")
-        channel_results = tester.test_channel_specific_extraction(channel_id, "NAIDOC Week")
-        
-        # Test 3: Different users (if we have access)
-        print(f"\n3️⃣  Testing with different users:")
-        user_results = tester.test_different_users(channel_id)
-        
-        # Test 4: Exact API format from documentation
-        print(f"\n4️⃣  Testing exact API format from documentation:")
-        exact_format_results = tester.test_exact_api_format(user_id="me", channel_id=channel_id)
-        
-        # Save all results
+        # Test each channel
         all_results = {
             "timestamp": datetime.now().isoformat(),
-            "channel_id": channel_id,
             "basic_endpoint_tests": basic_results,
-            "channel_specific_tests": channel_results,
-            "user_specific_tests": user_results,
-            "exact_format_test": exact_format_results
+            "channel_tests": {}
         }
+        
+        channel_names = {
+            "d6c65e4872704eaf8b859c8bd5adc5ed": "NAIDOC Week",
+            "c094a68f1d1a4a14a681ff411b66daf3": "Anzac Day ceremony - Wednesday 8 May 2024"
+        }
+        
+        for i, channel_id in enumerate(channel_ids, 1):
+            channel_name = channel_names.get(channel_id, "Unknown")
+            print(f"\n📢 CHANNEL {i+1}: Testing {channel_name}")
+            print(f"Channel ID: {channel_id}")
+            print("="*60)
+            
+            # Test 2: Channel-specific extraction
+            print(f"\n2️⃣  Testing channel-specific extraction for: {channel_name}")
+            channel_results = tester.test_channel_specific_extraction(channel_id, channel_name)
+            
+            # Test 3: Different users (if we have access)
+            print(f"\n3️⃣  Testing with different users:")
+            user_results = tester.test_different_users(channel_id)
+            
+            # Test 4: Exact API format from documentation
+            print(f"\n4️⃣  Testing exact API format from documentation:")
+            exact_format_results = tester.test_exact_api_format(user_id="me", channel_id=channel_id)
+            
+            # Store results for this channel
+            all_results["channel_tests"][channel_id] = {
+                "channel_name": channel_name,
+                "channel_specific_tests": channel_results,
+                "user_specific_tests": user_results,
+                "exact_format_test": exact_format_results
+            }
         
         output_file = "user_messages_api_test_results.json"
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -427,15 +446,30 @@ def main():
         successful_tests = 0
         total_tests = 0
         
-        for test_type, results in all_results.items():
-            if isinstance(results, dict) and "status_code" not in str(results):
-                for test_name, result in results.items():
-                    if isinstance(result, dict):
-                        total_tests += 1
-                        if result.get("success"):
-                            successful_tests += 1
+        # Count basic endpoint tests
+        for test_name, result in all_results.get("basic_endpoint_tests", {}).items():
+            if isinstance(result, dict):
+                total_tests += 1
+                if result.get("success"):
+                    successful_tests += 1
         
-        print(f"📈 Success Rate: {successful_tests}/{total_tests} tests passed")
+        # Count channel tests
+        for channel_id, channel_data in all_results.get("channel_tests", {}).items():
+            channel_name = channel_data.get("channel_name", "Unknown")
+            print(f"\n📊 Results for {channel_name} ({channel_id}):")
+            
+            for test_type, results in channel_data.items():
+                if test_type != "channel_name" and isinstance(results, dict):
+                    for test_name, result in results.items():
+                        if isinstance(result, dict) and "status_code" in result:
+                            total_tests += 1
+                            if result.get("success"):
+                                successful_tests += 1
+                                print(f"  ✅ {test_name}: SUCCESS")
+                            else:
+                                print(f"  ❌ {test_name}: FAILED ({result.get('error', 'Unknown error')})")
+        
+        print(f"\n📈 Overall Success Rate: {successful_tests}/{total_tests} tests passed")
         
         return 0
         
