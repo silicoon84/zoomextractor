@@ -913,18 +913,18 @@ class ImprovedChatExtractor:
                 logger.info(f"Found channel: {channel_name}")
             else:
                 # Fallback: Check if we have the channels file from a previous run
-            channels_file = self.output_dir / "channels" / "all_unique_channels.json"
-            if channels_file.exists():
-                with open(channels_file, 'r', encoding='utf-8') as f:
-                    all_channels = json.load(f)
+                channels_file = self.output_dir / "channels" / "all_unique_channels.json"
+                if channels_file.exists():
+                    with open(channels_file, 'r', encoding='utf-8') as f:
+                        all_channels = json.load(f)
                 
-                # Find the channel in the list
-                for channel in all_channels:
-                    if channel.get("id") == channel_id:
-                        channel_info = channel
-                        channel_name = channel.get("name", "Unknown")
+                    # Find the channel in the list
+                    for channel in all_channels:
+                        if channel.get("id") == channel_id:
+                            channel_info = channel
+                            channel_name = channel.get("name", "Unknown")
                             logger.info(f"Found channel in cache: {channel_name}")
-                        break
+                            break
             
             # Debug: Log detailed channel information
             if debug and channel_info:
