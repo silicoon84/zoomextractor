@@ -214,7 +214,8 @@ class ImprovedChatExtractor:
     
     def get_messages(self, user_id: str = "me", to_contact: Optional[str] = None, 
                     to_channel: Optional[str] = None, from_date: Optional[str] = None,
-                    to_date: Optional[str] = None, include_files: bool = True) -> List[Dict]:
+                    to_date: Optional[str] = None, include_files: bool = True, 
+                    include_deleted_and_edited: bool = False) -> List[Dict]:
         """Get messages using GET /v2/chat/users/{userId}/messages"""
         
         if not to_contact and not to_channel:
@@ -232,8 +233,9 @@ class ImprovedChatExtractor:
             
             url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
             params = {
-                "page_size": 50,
-                "download_file_formats": "mp4" if include_files else None
+                "page_size": "50",
+                "download_file_formats": "audio/mp4" if include_files else None,
+                "include_deleted_and_edited_message": "true" if include_deleted_and_edited else None
             }
             
             # Add contact or channel parameter
@@ -338,9 +340,12 @@ class ImprovedChatExtractor:
                                days: int = 30, download_files: bool = True, extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
         """Extract messages from a specific channel using a single user"""
         
-        # Calculate date range
+        # Calculate date range - use 2020 as default start for older messages
         to_date = datetime.now().isoformat() + "Z"
-        from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
+        if days >= 365:  # If looking back more than a year, start from 2020
+            from_date = "2020-01-01T00:00:00Z"
+        else:
+            from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
         
         logger.info(f"Extracting messages from channel '{channel_name}' ({channel_id})")
         logger.info(f"Date range: {from_date} to {to_date}")
@@ -365,14 +370,15 @@ class ImprovedChatExtractor:
         # Try different approaches based on channel type
         messages = []
         
-        # For all channels, use to_channel parameter
-        logger.info(f"Attempting to extract messages using to_channel parameter...")
+        # For all channels, use to_channel parameter with comprehensive settings
+        logger.info(f"Attempting to extract messages using to_channel parameter with 2020 date range...")
         messages = self.get_messages(
             user_id=extractor_user,
             to_channel=channel_id,
             from_date=from_date,
             to_date=to_date,
-            include_files=download_files
+            include_files=download_files,
+            include_deleted_and_edited=True
         )
         
         # If no messages found and this is a group chat (type 4), try alternative approaches
@@ -388,7 +394,8 @@ class ImprovedChatExtractor:
                     to_channel=jid,
                     from_date=from_date,
                     to_date=to_date,
-                    include_files=download_files
+                    include_files=download_files,
+                    include_deleted_and_edited=True
                 )
                 if jid_messages:
                     logger.info(f"Found {len(jid_messages)} messages using JID approach")
@@ -402,7 +409,8 @@ class ImprovedChatExtractor:
                 no_date_messages = self.get_messages(
                     user_id=extractor_user,
                     to_channel=channel_id,
-                    include_files=download_files
+                    include_files=download_files,
+                    include_deleted_and_edited=True
                 )
                 if no_date_messages:
                     logger.info(f"Found {len(no_date_messages)} messages without date filters")
@@ -446,7 +454,8 @@ class ImprovedChatExtractor:
                                 to_channel=channel_id,
                                 from_date=from_date,
                                 to_date=to_date,
-                                include_files=download_files
+                                include_files=download_files,
+                                include_deleted_and_edited=True
                             )
                             
                             if user_messages:
@@ -650,7 +659,7 @@ def main():
     
     @click.command()
     @click.option('--extractor-user', default='me', help='User ID to use for extracting messages (default: me). Try a specific user ID if "me" fails.')
-    @click.option('--days', default=30, help='Number of days to look back (default: 30)')
+    @click.option('--days', default=3650, help='Number of days to look back (default: 3650, which triggers 2020 start date)')
     @click.option('--output-dir', default='./chat_extraction', help='Output directory')
     @click.option('--no-files', is_flag=True, help='Skip downloading file attachments')
     @click.option('--no-inactive', is_flag=True, help='Skip inactive users when collecting channels')
