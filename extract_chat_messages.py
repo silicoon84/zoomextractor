@@ -141,7 +141,7 @@ class ChatMessageExtractor:
         return user_results
     
     def _extract_one_on_one_messages(self, user_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract one-on-one chat messages using GET /chat/users/{userId}/messages with contacts"""
+        """Extract one-on-one chat messages using the working method"""
         messages = []
         
         try:
@@ -156,7 +156,7 @@ class ChatMessageExtractor:
             
             logger.info(f"[INFO] Found {len(contacts)} contacts, checking for messages...")
             
-            # Extract messages with each contact
+            # Extract messages with each contact using the working method
             for contact in contacts:
                 contact_id = contact.get("identifier") or contact.get("id") or contact.get("email")
                 if not contact_id:
@@ -166,10 +166,12 @@ class ChatMessageExtractor:
                 
                 url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
                 params = {
-                    "to_contact": contact_id,  # Required parameter according to API spec
+                    "page_size": "50",
+                    "to_contact": contact_id,
                     "from": from_date,
                     "to": to_date,
-                    "page_size": 50
+                    "download_file_formats": "audio/mp4",
+                    "include_deleted_and_edited_message": "true"
                 }
                 
                 next_page_token = None
@@ -194,8 +196,11 @@ class ChatMessageExtractor:
                     elif response.status_code == 404:
                         logger.debug(f"[DEBUG] No messages found with contact {contact_id}")
                         break
+                    elif response.status_code == 400 and "No permission to access" in response.text:
+                        logger.warning(f"[WARN] No permission to access contact {contact_id}")
+                        break
                     else:
-                        logger.warning(f"[WARN] Failed to fetch messages with contact {contact_id}: {response.status_code}")
+                        logger.warning(f"[WARN] Failed to fetch messages with contact {contact_id}: {response.status_code} - {response.text}")
                         break
                 
                 if contact_messages:
@@ -297,13 +302,53 @@ class ChatMessageExtractor:
         return messages
     
     def _extract_group_messages_by_id(self, group_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract messages from a specific group chat"""
+        """Extract messages from a specific group chat using the working method"""
         messages = []
         
         try:
-            # Note: The actual endpoint for group messages may not be available
-            # This is a placeholder implementation
-            logger.debug(f"[DEBUG] Group message extraction not implemented for group {group_id}")
+            logger.info(f"[GROUP] Extracting messages from group {group_id}")
+            
+            # Use the working method - try with group_id as channel
+            url = f"https://api.zoom.us/v2/chat/users/me/messages"
+            params = {
+                "page_size": "50",
+                "to_channel": group_id,
+                "from": from_date,
+                "to": to_date,
+                "download_file_formats": "audio/mp4",
+                "include_deleted_and_edited_message": "true"
+            }
+            
+            next_page_token = None
+            
+            while True:
+                if next_page_token:
+                    params["next_page_token"] = next_page_token
+                
+                self.rate_limiter.sleep(0)
+                response = requests.get(url, headers=self.auth_headers, params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    page_messages = data.get("messages", [])
+                    messages.extend(page_messages)
+                    
+                    next_page_token = data.get("next_page_token")
+                    if not next_page_token:
+                        break
+                        
+                elif response.status_code == 404:
+                    logger.debug(f"[DEBUG] No messages found for group {group_id}")
+                    break
+                elif response.status_code == 400 and "No permission to access" in response.text:
+                    logger.warning(f"[WARN] No permission to access group {group_id}")
+                    break
+                else:
+                    logger.warning(f"[WARN] Failed to fetch messages for group {group_id}: {response.status_code} - {response.text}")
+                    break
+            
+            if messages:
+                logger.info(f"[GROUP] Found {len(messages)} messages in group {group_id}")
             
         except Exception as e:
             logger.error(f"[ERROR] Error extracting group messages for group {group_id}: {e}")
@@ -353,13 +398,53 @@ class ChatMessageExtractor:
         return messages
     
     def _extract_channel_messages_by_id(self, channel_id: str, from_date: str, to_date: str) -> List[Dict]:
-        """Extract messages from a specific channel"""
+        """Extract messages from a specific channel using the working method"""
         messages = []
         
         try:
-            # Note: The actual endpoint for channel messages may not be available
-            # This is a placeholder implementation
-            logger.debug(f"[DEBUG] Channel message extraction not implemented for channel {channel_id}")
+            logger.info(f"[CHANNEL] Extracting messages from channel {channel_id}")
+            
+            # Use the working method from our improved script
+            url = f"https://api.zoom.us/v2/chat/users/me/messages"
+            params = {
+                "page_size": "50",
+                "to_channel": channel_id,
+                "from": from_date,
+                "to": to_date,
+                "download_file_formats": "audio/mp4",
+                "include_deleted_and_edited_message": "true"
+            }
+            
+            next_page_token = None
+            
+            while True:
+                if next_page_token:
+                    params["next_page_token"] = next_page_token
+                
+                self.rate_limiter.sleep(0)
+                response = requests.get(url, headers=self.auth_headers, params=params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    page_messages = data.get("messages", [])
+                    messages.extend(page_messages)
+                    
+                    next_page_token = data.get("next_page_token")
+                    if not next_page_token:
+                        break
+                        
+                elif response.status_code == 404:
+                    logger.debug(f"[DEBUG] No messages found for channel {channel_id}")
+                    break
+                elif response.status_code == 400 and "No permission to access" in response.text:
+                    logger.warning(f"[WARN] No permission to access channel {channel_id}")
+                    break
+                else:
+                    logger.warning(f"[WARN] Failed to fetch messages for channel {channel_id}: {response.status_code} - {response.text}")
+                    break
+            
+            if messages:
+                logger.info(f"[CHANNEL] Found {len(messages)} messages in channel {channel_id}")
             
         except Exception as e:
             logger.error(f"[ERROR] Error extracting channel messages for channel {channel_id}: {e}")
