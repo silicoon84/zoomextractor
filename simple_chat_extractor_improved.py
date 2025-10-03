@@ -124,6 +124,9 @@ class ImprovedChatExtractor:
                 elif response.status_code == 404:
                     logger.info(f"No channels found for user {user_id}")
                     break
+                elif response.status_code == 400 and "No permission to access" in response.text:
+                    logger.warning(f"No permission to access channels for user {user_id} - skipping")
+                    break
                 else:
                     logger.error(f"Failed to get channels: {response.status_code} - {response.text}")
                     break
@@ -248,10 +251,6 @@ class ImprovedChatExtractor:
             # Remove None values
             params = {k: v for k, v in params.items() if v is not None}
             
-            # Debug: Log the actual API request
-            logger.info(f"Making API request to: {url}")
-            logger.info(f"Request parameters: {params}")
-            
             next_page_token = None
             
             while True:
@@ -263,14 +262,8 @@ class ImprovedChatExtractor:
                 
                 if response.status_code == 200:
                     data = response.json()
-                    logger.debug(f"API Response: {data}")
                     page_messages = data.get("messages", [])
                     messages.extend(page_messages)
-                    
-                    # Log the actual response structure for debugging
-                    logger.info(f"API returned {len(page_messages)} messages on this page")
-                    if page_messages:
-                        logger.info(f"Sample message structure: {page_messages[0].keys()}")
                     
                     next_page_token = data.get("next_page_token")
                     if not next_page_token:
@@ -278,6 +271,9 @@ class ImprovedChatExtractor:
                         
                 elif response.status_code == 404:
                     logger.info(f"No messages found")
+                    break
+                elif response.status_code == 400 and "No permission to access" in response.text:
+                    logger.warning(f"No permission to access messages for user {user_id} - channel may be restricted")
                     break
                 else:
                     logger.error(f"Failed to get messages: {response.status_code} - {response.text}")
@@ -483,32 +479,9 @@ class ImprovedChatExtractor:
                         break
             
             logger.info(f"Found channel: {channel_name}")
-            if channel_info:
-                logger.info(f"Channel type: {channel_info.get('type', 'Unknown')}")
-                logger.info(f"Channel status: {channel_info.get('status', 'Unknown')}")
-                logger.info(f"Accessible by users: {len(channel_info.get('accessible_by_users', []))}")
             
         except Exception as e:
             logger.warning(f"Could not load channel info: {e}")
-        
-        # First, let's try to verify the channel exists and we have access to it
-        logger.info("Verifying channel access...")
-        try:
-            # Try to get channel details directly
-            channel_details_url = f"https://api.zoom.us/v2/chat/users/{extractor_user}/channels/{channel_id}"
-            channel_response = self.make_api_request(channel_details_url)
-            
-            if channel_response.status_code == 200:
-                channel_details = channel_response.json()
-                logger.info(f"Channel details retrieved successfully: {channel_details}")
-            elif channel_response.status_code == 404:
-                logger.error(f"Channel {channel_id} not found or not accessible to user {extractor_user}")
-                return {"error": "Channel not found or not accessible", "channel_id": channel_id}
-            else:
-                logger.warning(f"Could not retrieve channel details: {channel_response.status_code} - {channel_response.text}")
-                
-        except Exception as e:
-            logger.warning(f"Error verifying channel access: {e}")
         
         # Extract messages from the channel
         result = self.extract_channel_messages(
@@ -539,7 +512,7 @@ def main():
     """Main CLI function"""
     
     @click.command()
-    @click.option('--extractor-user', default='me', help='User ID to use for extracting messages (default: me)')
+    @click.option('--extractor-user', default='me', help='User ID to use for extracting messages (default: me). Try a specific user ID if "me" fails.')
     @click.option('--days', default=30, help='Number of days to look back (default: 30)')
     @click.option('--output-dir', default='./chat_extraction', help='Output directory')
     @click.option('--no-files', is_flag=True, help='Skip downloading file attachments')
