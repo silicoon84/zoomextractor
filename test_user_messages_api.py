@@ -73,11 +73,19 @@ class UserMessagesAPITester:
                 }
             },
             {
-                "name": "With date range and channel",
+                "name": "With date range (from 2020)",
+                "params": {
+                    "page_size": "50",
+                    "from": "2020-01-01T00:00:00Z",
+                    "to": datetime.now().isoformat() + "Z"
+                }
+            },
+            {
+                "name": "With date range and channel (from 2020)",
                 "params": {
                     "page_size": "50",
                     "to_channel": channel_id,
-                    "from": (datetime.now() - timedelta(days=30)).isoformat() + "Z",
+                    "from": "2020-01-01T00:00:00Z",
                     "to": datetime.now().isoformat() + "Z"
                 } if channel_id else None
             },
@@ -89,11 +97,11 @@ class UserMessagesAPITester:
                 }
             },
             {
-                "name": "With comprehensive parameters",
+                "name": "With comprehensive parameters (from 2020)",
                 "params": {
                     "page_size": "50",
                     "to_channel": channel_id,
-                    "from": (datetime.now() - timedelta(days=30)).isoformat() + "Z",
+                    "from": "2020-01-01T00:00:00Z",
                     "to": datetime.now().isoformat() + "Z",
                     "include_deleted_and_edited_message": "true",
                     "download_file_formats": "audio/mp4"
@@ -229,12 +237,12 @@ class UserMessagesAPITester:
                 "params": {"to_channel": channel_id, "page_size": "50"}
             },
             {
-                "name": "User 'me' with channel ID and date range",
+                "name": "User 'me' with channel ID and date range (from 2020)",
                 "user_id": "me", 
                 "params": {
                     "to_channel": channel_id,
                     "page_size": "50",
-                    "from": (datetime.now() - timedelta(days=90)).isoformat() + "Z",
+                    "from": "2020-01-01T00:00:00Z",
                     "to": datetime.now().isoformat() + "Z"
                 }
             },
@@ -244,12 +252,12 @@ class UserMessagesAPITester:
                 "params": {"to_channel": channel_id, "page_size": "10"}
             },
             {
-                "name": "User 'me' with comprehensive parameters",
+                "name": "User 'me' with comprehensive parameters (from 2020)",
                 "user_id": "me",
                 "params": {
                     "to_channel": channel_id,
                     "page_size": "50",
-                    "from": (datetime.now() - timedelta(days=90)).isoformat() + "Z",
+                    "from": "2020-01-01T00:00:00Z",
                     "to": datetime.now().isoformat() + "Z",
                     "include_deleted_and_edited_message": "true",
                     "download_file_formats": "audio/mp4"
@@ -319,10 +327,10 @@ class UserMessagesAPITester:
         if channel_id:
             exact_params["to_channel"] = channel_id
         
-        # Add date range
+        # Add date range (from 2020 to capture older messages)
         exact_params.update({
-            "from": "2020-02-10T21:39:50Z",
-            "to": "2020-02-15T12:00:00Z"
+            "from": "2020-01-01T00:00:00Z",
+            "to": datetime.now().isoformat() + "Z"
         })
         
         url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
