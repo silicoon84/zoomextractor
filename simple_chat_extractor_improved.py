@@ -439,9 +439,9 @@ class ImprovedChatExtractor:
             include_deleted_and_edited=True
         )
         
-        # If no messages found and this is a group chat (type 4), try alternative approaches
-        if not messages and channel_type == 4:
-            logger.info(f"No messages found with to_channel. Channel type 4 detected - trying alternative approaches...")
+        # If no messages found, try alternative approaches for all channels
+        if not messages:
+            logger.info(f"No messages found with to_channel. Trying alternative approaches...")
             
             # Try using the JID (XMPP identifier) instead of channel ID
             if channel_info and channel_info.get("jid"):
@@ -477,64 +477,78 @@ class ImprovedChatExtractor:
                     logger.info(f"No date filter approach also returned no messages")
             
         # Try with each accessible user until we find one with access
-        if not messages and channel_info and channel_info.get("accessible_by_users"):
-            accessible_users = channel_info.get("accessible_by_users", [])
-            logger.info(f"Trying each accessible user from the list: {accessible_users}")
+        if not messages:
+            # Try known accessible users if channel_info is not available
+            accessible_users = []
+            if channel_info and channel_info.get("accessible_by_users"):
+                accessible_users = channel_info.get("accessible_by_users", [])
+            else:
+                # Fallback to known users from our test results
+                accessible_users = [
+                    "jgeorgiou@atwea.edu.au",
+                    "nbailey@atwea.edu.au", 
+                    "kdavidson@atwea.edu.au",
+                    "gdennis@atwea.edu.au"
+                ]
+                logger.info(f"No channel info available, trying known accessible users: {accessible_users}")
             
-            for test_user in accessible_users:
-                if test_user == "me":
-                    continue
-                    
-                logger.info(f"Trying with user context: {test_user}")
+            if accessible_users:
+                logger.info(f"Trying each accessible user from the list: {accessible_users}")
                 
-                try:
-                    from zoom_extractor.users import UserEnumerator
-                    user_enumerator = UserEnumerator(self.auth_headers)
-                    user_info = user_enumerator.get_user_by_email(test_user)
+                for test_user in accessible_users:
+                    if test_user == "me":
+                        continue
+                        
+                    logger.info(f"Trying with user context: {test_user}")
                     
-                    if user_info:
-                        user_id = user_info.get("id")
-                        logger.info(f"Found user ID {user_id} for {test_user}")
+                    try:
+                        from zoom_extractor.users import UserEnumerator
+                        user_enumerator = UserEnumerator(self.auth_headers)
+                        user_info = user_enumerator.get_user_by_email(test_user)
                         
-                        # Test if this user has access to the channel
-                        test_url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
-                        test_params = {"page_size": 1, "to_channel": channel_id}
-                        
-                        self.rate_limiter.sleep(0)
-                        test_response = requests.get(test_url, headers=self.auth_headers, params=test_params, timeout=30)
-                        
-                        if test_response.status_code == 200:
-                            logger.info(f"✅ User {test_user} has access to the channel!")
+                        if user_info:
+                            user_id = user_info.get("id")
+                            logger.info(f"Found user ID {user_id} for {test_user}")
                             
-                            # Now get all messages with this user
-                            user_messages = self.get_messages(
-                                user_id=user_id,
-                                to_channel=channel_id,
-                                from_date=from_date,
-                                to_date=to_date,
-                                include_files=download_files,
-                                include_deleted_and_edited=True
-                            )
+                            # Test if this user has access to the channel
+                            test_url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
+                            test_params = {"page_size": 1, "to_channel": channel_id}
                             
-                            if user_messages:
-                                logger.info(f"🎉 SUCCESS! Found {len(user_messages)} messages using user {test_user}")
-                                messages = user_messages
-                                break
+                            self.rate_limiter.sleep(0)
+                            test_response = requests.get(test_url, headers=self.auth_headers, params=test_params, timeout=30)
+                            
+                            if test_response.status_code == 200:
+                                logger.info(f"✅ User {test_user} has access to the channel!")
+                                
+                                # Now get all messages with this user
+                                user_messages = self.get_messages(
+                                    user_id=user_id,
+                                    to_channel=channel_id,
+                                    from_date=from_date,
+                                    to_date=to_date,
+                                    include_files=download_files,
+                                    include_deleted_and_edited=True
+                                )
+                                
+                                if user_messages:
+                                    logger.info(f"🎉 SUCCESS! Found {len(user_messages)} messages using user {test_user}")
+                                    messages = user_messages
+                                    break
+                                else:
+                                    logger.info(f"User {test_user} has access but no messages found")
+                            elif test_response.status_code == 404:
+                                logger.info(f"❌ User {test_user} has no access to the channel (404)")
                             else:
-                                logger.info(f"User {test_user} has access but no messages found")
-                        elif test_response.status_code == 404:
-                            logger.info(f"❌ User {test_user} has no access to the channel (404)")
+                                logger.warning(f"⚠️  User {test_user} access test failed: {test_response.status_code}")
                         else:
-                            logger.warning(f"⚠️  User {test_user} access test failed: {test_response.status_code}")
-                    else:
-                        logger.warning(f"Could not find user info for {test_user}")
-                        
-                except Exception as e:
-                    logger.error(f"Error testing user {test_user}: {e}")
-                    continue
-            
-            if not messages:
-                logger.warning(f"None of the accessible users have access to the channel")
+                            logger.warning(f"Could not find user info for {test_user}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error testing user {test_user}: {e}")
+                        continue
+                
+                if not messages:
+                    logger.warning(f"None of the accessible users have access to the channel")
         
         if not messages:
             logger.warning(f"All extraction methods failed - no messages found for channel {channel_name}")
