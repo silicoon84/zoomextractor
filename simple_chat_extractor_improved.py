@@ -303,25 +303,83 @@ class ImprovedChatExtractor:
         return messages
     
     def get_channel_details(self, channel_id: str) -> Dict:
-        """Get channel details directly from the API"""
+        """Get channel details - use known channel info or search user channels"""
         try:
-            logger.info(f"Fetching channel details for: {channel_id}")
+            logger.info(f"Getting channel details for: {channel_id}")
             
-            # Try to get channel details from the channels API
-            url = f"https://api.zoom.us/v2/chat/channels/{channel_id}"
-            self.rate_limiter.sleep(0)
-            response = self.make_api_request(url)
+            # Known channel mappings from your channels file
+            known_channels = {
+                "c094a68f1d1a4a14a681ff411b66daf3": {
+                    "id": "c094a68f1d1a4a14a681ff411b66daf3",
+                    "name": "Anzac Day ceremony - Wednesday 8 May 2024",
+                    "type": 4,
+                    "accessible_by_users": [
+                        "jgeorgiou@atwea.edu.au",
+                        "nbailey@atwea.edu.au", 
+                        "kdavidson@atwea.edu.au",
+                        "gdennis@atwea.edu.au"
+                    ]
+                },
+                "d6c65e4872704eaf8b859c8bd5adc5ed": {
+                    "id": "d6c65e4872704eaf8b859c8bd5adc5ed", 
+                    "name": "NAIDOC Week",
+                    "type": 4,
+                    "accessible_by_users": [
+                        "jgeorgiou@atwea.edu.au",
+                        "nbailey@atwea.edu.au",
+                        "kdavidson@atwea.edu.au",
+                        "gdennis@atwea.edu.au",
+                        "gdennis@atwea.edu.au",
+                        "syoung@atwea.edu.au",
+                        "sgreen@atwea.edu.au",
+                        "mblue@atwea.edu.au",
+                        "ahalverson@atwea.edu.au",
+                        "tgibson@atwea.edu.au",
+                        "stassell@atwea.edu.au",
+                        "sconstable@atwea.edu.au"
+                    ]
+                }
+            }
             
-            if response.status_code == 200:
-                channel_data = response.json()
-                logger.info(f"✅ Found channel: {channel_data.get('name', 'Unknown')}")
-                return channel_data
-            elif response.status_code == 404:
-                logger.warning(f"Channel {channel_id} not found via channels API")
-                return {}
-            else:
-                logger.warning(f"Failed to get channel details: {response.status_code} - {response.text}")
-                return {}
+            # Check if we have this channel in our known list
+            if channel_id in known_channels:
+                channel_info = known_channels[channel_id]
+                logger.info(f"✅ Found known channel: {channel_info['name']}")
+                return channel_info
+            
+            # If not in known list, try to search through user channels
+            logger.info(f"Channel {channel_id} not in known list, searching user channels...")
+            known_users = [
+                "jgeorgiou@atwea.edu.au",
+                "nbailey@atwea.edu.au", 
+                "kdavidson@atwea.edu.au",
+                "gdennis@atwea.edu.au"
+            ]
+            
+            user_enumerator = UserEnumerator(self.auth_headers)
+            
+            for user_email in known_users:
+                try:
+                    logger.info(f"Checking channels for user: {user_email}")
+                    user_info = user_enumerator.get_user_by_email(user_email)
+                    if not user_info:
+                        continue
+                        
+                    user_id = user_info.get("id")
+                    user_channels = self.get_user_channels(user_id)
+                    
+                    # Look for our channel in this user's channels
+                    for channel in user_channels:
+                        if channel.get("id") == channel_id:
+                            logger.info(f"✅ Found channel: {channel.get('name', 'Unknown')}")
+                            return channel
+                            
+                except Exception as e:
+                    logger.debug(f"Error checking user {user_email}: {e}")
+                    continue
+            
+            logger.warning(f"Channel {channel_id} not found in any user's channels")
+            return {}
                 
         except Exception as e:
             logger.error(f"Error getting channel details: {e}")
