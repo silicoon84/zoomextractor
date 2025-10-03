@@ -322,9 +322,9 @@ class ImprovedChatExtractor:
                 # Create safe filename
                 safe_filename = "".join(c for c in file_name if c.isalnum() or c in ('.', '-', '_')).strip()
                 
-                # Use channel-specific folder if provided
+                # Use unified folder if provided
                 if channel_folder_name:
-                    file_path = self.output_dir / "files" / channel_folder_name / f"{file_id}_{safe_filename}"
+                    file_path = self.output_dir / channel_folder_name / f"{file_id}_{safe_filename}"
                 else:
                     file_path = self.output_dir / "files" / f"{file_id}_{safe_filename}"
                 
@@ -544,36 +544,36 @@ class ImprovedChatExtractor:
         # Download files if requested (before creating folder structure)
         downloaded_files = []
         if download_files and messages:
-            # Create safe channel name for folder
+            # Create unified folder name
+            current_date = datetime.now().strftime('%Y-%m-%d')
             safe_channel_name = "".join(c for c in channel_name if c.isalnum() or c in (' ', '-', '_')).strip()
             safe_channel_name = safe_channel_name.replace(' ', '_')[:30]
-            channel_folder_name = f"channel_{channel_id}_{safe_channel_name}"
+            folder_name = f"{current_date}_{safe_channel_name}_{channel_id}"
             
             for message in messages:
                 files = message.get("files", [])
                 for file_info in files:
-                    file_path = self.download_file(file_info, channel_folder_name)
+                    file_path = self.download_file(file_info, folder_name)
                     if file_path:
                         downloaded_files.append(file_path)
         
-        # Create channel-specific folder structure
+        # Create unified folder structure with date, channel name, and ID
+        current_date = datetime.now().strftime('%Y-%m-%d')
         safe_channel_name = "".join(c for c in channel_name if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_channel_name = safe_channel_name.replace(' ', '_')[:30]  # Limit length
-        channel_folder_name = f"channel_{channel_id}_{safe_channel_name}"
+        folder_name = f"{current_date}_{safe_channel_name}_{channel_id}"
         
-        # Create channel-specific directories
-        channel_messages_dir = self.output_dir / "messages" / channel_folder_name
-        channel_files_dir = self.output_dir / "files" / channel_folder_name
-        channel_messages_dir.mkdir(parents=True, exist_ok=True)
-        channel_files_dir.mkdir(parents=True, exist_ok=True)
+        # Create unified channel directory
+        channel_dir = self.output_dir / folder_name
+        channel_dir.mkdir(parents=True, exist_ok=True)
         
         # Save messages JSON
-        messages_file = channel_messages_dir / "messages.json"
+        messages_file = channel_dir / "messages.json"
         with open(messages_file, 'w', encoding='utf-8') as f:
             json.dump(messages, f, indent=2, ensure_ascii=False)
         
         # Create human-readable text file
-        text_file = channel_messages_dir / "messages.txt"
+        text_file = channel_dir / "messages.txt"
         self._create_human_readable_export(messages, text_file)
         
         result = {
@@ -584,7 +584,7 @@ class ImprovedChatExtractor:
             "date_range": f"{from_date} to {to_date}",
             "messages_file": str(messages_file),
             "text_file": str(text_file),
-            "channel_folder": channel_folder_name,
+            "channel_folder": folder_name,
             "extractor_user": extractor_user
         }
         
