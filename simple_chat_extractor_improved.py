@@ -302,6 +302,31 @@ class ImprovedChatExtractor:
         
         return messages
     
+    def get_channel_details(self, channel_id: str) -> Dict:
+        """Get channel details directly from the API"""
+        try:
+            logger.info(f"Fetching channel details for: {channel_id}")
+            
+            # Try to get channel details from the channels API
+            url = f"https://api.zoom.us/v2/chat/channels/{channel_id}"
+            self.rate_limiter.sleep(0)
+            response = self.make_api_request(url)
+            
+            if response.status_code == 200:
+                channel_data = response.json()
+                logger.info(f"✅ Found channel: {channel_data.get('name', 'Unknown')}")
+                return channel_data
+            elif response.status_code == 404:
+                logger.warning(f"Channel {channel_id} not found via channels API")
+                return {}
+            else:
+                logger.warning(f"Failed to get channel details: {response.status_code} - {response.text}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Error getting channel details: {e}")
+            return {}
+    
     def download_file(self, file_info: Dict, channel_folder_name: str = None) -> Optional[str]:
         """Download a file attachment"""
         try:
@@ -691,28 +716,33 @@ class ImprovedChatExtractor:
         
         logger.info(f"Extracting messages from single channel: {channel_id}")
         
-        # Try to get channel info from the channels list if it exists
+        # Get channel details directly from the API
         channel_info = None
         channel_name = "Unknown"
         
         try:
-            # Check if we have the channels file from a previous run
-            channels_file = self.output_dir / "channels" / "all_unique_channels.json"
-            if channels_file.exists():
-                with open(channels_file, 'r', encoding='utf-8') as f:
-                    all_channels = json.load(f)
-                
-                # Find the channel in the list
-                for channel in all_channels:
-                    if channel.get("id") == channel_id:
-                        channel_info = channel
-                        channel_name = channel.get("name", "Unknown")
-                        break
-            
-            logger.info(f"Found channel: {channel_name}")
+            # First try to get channel details from the API
+            channel_info = self.get_channel_details(channel_id)
+            if channel_info:
+                channel_name = channel_info.get("name", "Unknown")
+                logger.info(f"Found channel: {channel_name}")
+            else:
+                # Fallback: Check if we have the channels file from a previous run
+                channels_file = self.output_dir / "channels" / "all_unique_channels.json"
+                if channels_file.exists():
+                    with open(channels_file, 'r', encoding='utf-8') as f:
+                        all_channels = json.load(f)
+                    
+                    # Find the channel in the list
+                    for channel in all_channels:
+                        if channel.get("id") == channel_id:
+                            channel_info = channel
+                            channel_name = channel.get("name", "Unknown")
+                            logger.info(f"Found channel in cache: {channel_name}")
+                            break
             
             # Debug: Log detailed channel information
-            if debug:
+            if debug and channel_info:
                 logger.debug(f"Channel details: {json.dumps(channel_info, indent=2)}")
                 logger.debug(f"Channel type: {channel_info.get('type', 'unknown')}")
                 logger.debug(f"Channel settings: {channel_info.get('settings', {})}")
