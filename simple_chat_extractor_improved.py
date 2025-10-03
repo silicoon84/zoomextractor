@@ -689,7 +689,7 @@ class ImprovedChatExtractor:
         return result
     
     def extract_all_unique_channels(self, days: int = 30, download_files: bool = True,
-                                  include_inactive: bool = True, extractor_user: str = "me") -> Dict[str, Any]:
+                                  include_inactive: bool = True, extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
         """Extract messages from all unique channels (no duplicates)"""
         
         logger.info("Starting comprehensive chat extraction for all unique channels")
@@ -718,6 +718,16 @@ class ImprovedChatExtractor:
             channel_name = channel.get("name", "Unknown")
             accessible_users = channel.get("accessible_by_users", [])
             
+            # Try to get better channel details using our improved method
+            if channel_name == "Unknown" or not channel_name:
+                logger.info(f"Channel name is Unknown, trying to get better details for {channel_id}")
+                enhanced_channel_info = self.get_channel_details(channel_id)
+                if enhanced_channel_info:
+                    channel_name = enhanced_channel_info.get("name", "Unknown")
+                    # Update the channel info with enhanced details
+                    channel.update(enhanced_channel_info)
+                    logger.info(f"✅ Enhanced channel info: {channel_name}")
+            
             channel_type = channel.get("type", "unknown")
             logger.info(f"[{i}/{len(unique_channels)}] Processing channel: {channel_name}")
             logger.info(f"  Type: {channel_type}, Accessible by {len(accessible_users)} users")
@@ -729,7 +739,8 @@ class ImprovedChatExtractor:
                     channel_info=channel,
                     days=days,
                     download_files=download_files,
-                    extractor_user=extractor_user
+                    extractor_user=extractor_user,
+                    debug=debug
                 )
                 
                 result["accessible_by_users"] = accessible_users
@@ -896,7 +907,8 @@ def main():
                     days=days,
                     download_files=download_files,
                     include_inactive=include_inactive,
-                    extractor_user=extractor_user
+                    extractor_user=extractor_user,
+                    debug=debug
                 )
             
             logger.info("Extraction completed successfully!")
