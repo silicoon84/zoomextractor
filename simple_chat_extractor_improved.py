@@ -525,7 +525,7 @@ class ImprovedChatExtractor:
         if days >= 365:  # If looking back more than a year, start from 2020
             from_date = "2020-01-01T00:00:00Z"
         else:
-        from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
+            from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
         
         logger.info(f"Extracting messages from channel '{channel_name}' ({channel_id})")
         logger.info(f"Date range: {from_date} to {to_date}")
