@@ -383,9 +383,8 @@ def main():
     try:
         tester = UserMessagesAPITester()
         
-        # Test with the specific channels from your examples
+        # Test with the specific channel you mentioned
         channel_ids = [
-            "d6c65e4872704eaf8b859c8bd5adc5ed",  # NAIDOC Week channel
             "c094a68f1d1a4a14a681ff411b66daf3"   # Anzac Day ceremony channel
         ]
         
@@ -405,7 +404,6 @@ def main():
         }
         
         channel_names = {
-            "d6c65e4872704eaf8b859c8bd5adc5ed": "NAIDOC Week",
             "c094a68f1d1a4a14a681ff411b66daf3": "Anzac Day ceremony - Wednesday 8 May 2024"
         }
         

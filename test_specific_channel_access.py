@@ -38,7 +38,7 @@ def test_channel_access():
         return
     
     # Channel from your file
-    channel_id = "d6c65e4872704eaf8b859c8bd5adc5ed"
+    channel_id = "c094a68f1d1a4a14a681ff411b66daf3"
     accessible_users = [
         "jgeorgiou@atwea.edu.au",
         "nbailey@atwea.edu.au", 
@@ -47,7 +47,7 @@ def test_channel_access():
     ]
     
     logger.info(f"Testing channel access for: {channel_id}")
-    logger.info(f"Channel name: NAIDOC Week")
+    logger.info(f"Channel name: Anzac Day ceremony - Wednesday 8 May 2024")
     logger.info(f"Testing with accessible users: {accessible_users}")
     
     # Test with 'me' first
