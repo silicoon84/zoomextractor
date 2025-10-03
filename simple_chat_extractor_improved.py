@@ -362,7 +362,11 @@ class ImprovedChatExtractor:
             if channel_info:
                 logger.debug(f"Full channel info: {json.dumps(channel_info, indent=2)}")
         
+        # Try different approaches based on channel type
+        messages = []
+        
         # For all channels, use to_channel parameter
+        logger.info(f"Attempting to extract messages using to_channel parameter...")
         messages = self.get_messages(
             user_id=extractor_user,
             to_channel=channel_id,
@@ -370,6 +374,79 @@ class ImprovedChatExtractor:
             to_date=to_date,
             include_files=download_files
         )
+        
+        # If no messages found and this is a group chat (type 4), try alternative approaches
+        if not messages and channel_type == 4:
+            logger.info(f"No messages found with to_channel. Channel type 4 detected - trying alternative approaches...")
+            
+            # Try using the JID (XMPP identifier) instead of channel ID
+            if channel_info and channel_info.get("jid"):
+                jid = channel_info.get("jid")
+                logger.info(f"Trying with JID: {jid}")
+                jid_messages = self.get_messages(
+                    user_id=extractor_user,
+                    to_channel=jid,
+                    from_date=from_date,
+                    to_date=to_date,
+                    include_files=download_files
+                )
+                if jid_messages:
+                    logger.info(f"Found {len(jid_messages)} messages using JID approach")
+                    messages = jid_messages
+                else:
+                    logger.info(f"JID approach also returned no messages")
+            
+            # Try without date filters (some channels might not support date filtering)
+            if not messages:
+                logger.info(f"Trying without date filters...")
+                no_date_messages = self.get_messages(
+                    user_id=extractor_user,
+                    to_channel=channel_id,
+                    include_files=download_files
+                )
+                if no_date_messages:
+                    logger.info(f"Found {len(no_date_messages)} messages without date filters")
+                    messages = no_date_messages
+                else:
+                    logger.info(f"No date filter approach also returned no messages")
+            
+            # Try with a specific user from the accessible_by_users list
+            if not messages and channel_info and channel_info.get("accessible_by_users"):
+                accessible_users = channel_info.get("accessible_by_users", [])
+                if accessible_users and accessible_users[0] != "me":
+                    test_user = accessible_users[0]
+                    logger.info(f"Trying with user context: {test_user}")
+                    
+                        # Get the user ID for this email
+                    try:
+                        from zoom_extractor.users import UserEnumerator
+                        user_enumerator = UserEnumerator(self.auth_headers)
+                        user_info = user_enumerator.get_user_by_email(test_user)
+                        if user_info:
+                            user_id = user_info.get("id")
+                            logger.info(f"Found user ID {user_id} for {test_user}")
+                            
+                            user_messages = self.get_messages(
+                                user_id=user_id,
+                                to_channel=channel_id,
+                                from_date=from_date,
+                                to_date=to_date,
+                                include_files=download_files
+                            )
+                            if user_messages:
+                                logger.info(f"Found {len(user_messages)} messages using user {test_user}")
+                                messages = user_messages
+                            else:
+                                logger.info(f"User approach also returned no messages")
+                        else:
+                            logger.warning(f"Could not find user info for {test_user}")
+                    except Exception as e:
+                        logger.error(f"Error trying user approach: {e}")
+        
+        if not messages:
+            logger.warning(f"All extraction methods failed - no messages found for channel {channel_name}")
+        else:
+            logger.info(f"Successfully extracted {len(messages)} messages using primary method")
         
         # Download files if requested
         downloaded_files = []
