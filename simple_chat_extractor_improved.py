@@ -140,7 +140,7 @@ class ImprovedChatExtractor:
             logger.info(f"Getting channels for user: {user_id}")
             
             url = f"https://api.zoom.us/v2/chat/users/{user_id}/channels"
-            params = {"page_size": 50}
+            params = {"page_size": 300}  # Increased from 50 to 300 for more channels per request
             
             next_page_token = None
             
@@ -272,10 +272,12 @@ class ImprovedChatExtractor:
             
             url = f"https://api.zoom.us/v2/chat/users/{user_id}/messages"
             params = {
-                "page_size": "50",
+                "page_size": "300",  # Increased from 50 to 300 for more messages per request
                 "download_file_formats": "audio/mp4" if include_files else None,
                 "include_deleted_and_edited_message": "true" if include_deleted_and_edited else None
             }
+            
+            logger.info(f"Using page_size: 300 (increased from 50) to get more messages per request")
             
             # Add contact or channel parameter
             if to_contact:
@@ -1416,7 +1418,7 @@ class ImprovedChatExtractor:
             # Use the official contacts endpoint
             url = "https://api.zoom.us/v2/chat/users/me/contacts"
             params = {
-                "page_size": 50
+                "page_size": 300  # Increased from 50 to 300 for more contacts per request
             }
             
             next_page_token = None
