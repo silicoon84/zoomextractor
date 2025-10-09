@@ -293,10 +293,23 @@ class ImprovedChatExtractor:
             params = {k: v for k, v in params.items() if v is not None}
             
             next_page_token = None
+            page_count = 0
+            seen_tokens = set()  # Track seen tokens to prevent infinite loops
+            max_pages = 1000  # Safety limit to prevent infinite loops
             
-            while True:
+            while page_count < max_pages:
+                page_count += 1
+                
                 if next_page_token:
+                    # Check if we've seen this token before (infinite loop protection)
+                    if next_page_token in seen_tokens:
+                        logger.warning(f"Infinite loop detected - same next_page_token seen before: {next_page_token}")
+                        logger.warning(f"Breaking pagination to prevent infinite loop")
+                        break
+                    seen_tokens.add(next_page_token)
                     params["next_page_token"] = next_page_token
+                
+                logger.debug(f"Fetching page {page_count} with token: {next_page_token}")
                 
                 self.rate_limiter.sleep(0)
                 response = self.make_api_request(url, params)
@@ -313,15 +326,25 @@ class ImprovedChatExtractor:
                     messages.extend(page_messages)
                     
                     # Debug: Log detailed response info
-                    logger.info(f"API Response: Found {len(page_messages)} messages in this page")
+                    logger.info(f"API Response: Found {len(page_messages)} messages in page {page_count}")
                     logger.debug(f"Full API Response: {json.dumps(data, indent=2)}")
                     
-                    next_page_token = data.get("next_page_token")
+                    # Get next page token
+                    new_next_page_token = data.get("next_page_token")
+                    
+                    # Check if we got the same token again
+                    if new_next_page_token == next_page_token:
+                        logger.warning(f"API returned the same next_page_token: {new_next_page_token}")
+                        logger.warning(f"Breaking pagination to prevent infinite loop")
+                        break
+                    
+                    next_page_token = new_next_page_token
+                    
                     if not next_page_token:
-                        logger.info(f"Reached end of messages (no more pages)")
+                        logger.info(f"Reached end of messages (no more pages) after {page_count} pages")
                         break
                     else:
-                        logger.info(f"More pages available, continuing...")
+                        logger.info(f"More pages available, continuing... (page {page_count})")
                         
                 elif response.status_code == 404:
                     logger.info(f"No messages found (404 - endpoint not found)")
@@ -335,10 +358,16 @@ class ImprovedChatExtractor:
                     logger.error(f"Failed to get messages: {response.status_code} - {response.text}")
                     logger.debug(f"Full response: {response.text}")
                     break
+            
+            # Check if we hit the max pages limit
+            if page_count >= max_pages:
+                logger.warning(f"Hit maximum pages limit ({max_pages}), stopping pagination")
+                logger.warning(f"Total messages collected so far: {len(messages)}")
                     
         except Exception as e:
             logger.error(f"Error getting messages: {e}")
         
+        logger.info(f"Pagination complete: {len(messages)} total messages collected across {page_count} pages")
         return messages
     
     def get_channel_details(self, channel_id: str) -> Dict:
