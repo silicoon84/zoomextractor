@@ -297,7 +297,7 @@ class ImprovedChatExtractor:
             next_page_token = None
             page_count = 0
             seen_tokens = set()  # Track seen tokens to prevent infinite loops
-            max_pages = 1000  # Safety limit to prevent infinite loops
+            max_pages = 100000  # Safety limit to prevent infinite loops
             
             while page_count < max_pages:
                 page_count += 1
