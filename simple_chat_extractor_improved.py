@@ -295,6 +295,7 @@ class ImprovedChatExtractor:
             next_page_token = None
             page_count = 0
             seen_tokens = set()  # Track seen tokens to prevent infinite loops
+            seen_message_ids = set()  # Track seen message IDs to detect duplicate content
             max_pages = 1000  # Safety limit to prevent infinite loops
             
             while page_count < max_pages:
@@ -322,19 +323,85 @@ class ImprovedChatExtractor:
                 
                 if response.status_code == 200:
                     data = response.json()
+                    
+                    # Debug: Log the full response structure to understand what we're getting
+                    logger.debug(f"Full API Response Structure: {json.dumps(data, indent=2)}")
+                    
+                    # Check if there are other fields we might be missing
+                    logger.debug(f"Response keys: {list(data.keys())}")
+                    
+                    # Try different possible message field names
                     page_messages = data.get("messages", [])
-                    messages.extend(page_messages)
+                    if not page_messages:
+                        page_messages = data.get("data", [])
+                    if not page_messages:
+                        page_messages = data.get("items", [])
+                    if not page_messages:
+                        page_messages = data.get("results", [])
+                    
+                    logger.info(f"Found messages field with {len(page_messages)} messages")
+                    
+                    # Check for duplicate messages by tracking message IDs
+                    new_message_count = 0
+                    duplicate_message_count = 0
+                    
+                    for message in page_messages:
+                        # Try different possible ID field names
+                        message_id = (message.get("id") or 
+                                    message.get("message_id") or 
+                                    message.get("msg_id") or
+                                    message.get("uuid") or
+                                    str(message.get("timestamp", "")) + "_" + str(message.get("sender", "")))
+                        
+                        if message_id:
+                            if message_id in seen_message_ids:
+                                duplicate_message_count += 1
+                            else:
+                                seen_message_ids.add(message_id)
+                                new_message_count += 1
+                                messages.append(message)
+                        else:
+                            # If no ID, add it anyway (shouldn't happen with Zoom API)
+                            logger.warning(f"Message without ID found: {message}")
+                            messages.append(message)
+                            new_message_count += 1
                     
                     # Debug: Log detailed response info
-                    logger.info(f"API Response: Found {len(page_messages)} messages in page {page_count}")
-                    logger.debug(f"Full API Response: {json.dumps(data, indent=2)}")
+                    logger.info(f"API Response: Found {len(page_messages)} messages in page {page_count} ({new_message_count} new, {duplicate_message_count} duplicates)")
+                    
+                    # Also log some sample message IDs to help debug
+                    if page_messages:
+                        sample_ids = [msg.get("id") or msg.get("message_id") or "no-id" for msg in page_messages[:3]]
+                        logger.debug(f"Sample message IDs from this page: {sample_ids}")
+                    
+                    # If we got all duplicate messages, this indicates API pagination issue
+                    if len(page_messages) > 0 and new_message_count == 0:
+                        logger.warning(f"All {len(page_messages)} messages in page {page_count} were duplicates!")
+                        logger.warning(f"API pagination appears to be stuck - breaking pagination")
+                        break
+                    
+                    # If we got mostly duplicates, warn but continue
+                    if duplicate_message_count > 0:
+                        logger.warning(f"Found {duplicate_message_count} duplicate messages in page {page_count}")
                     
                     # Get next page token
                     new_next_page_token = data.get("next_page_token")
                     
+                    # Debug: Log pagination info
+                    logger.debug(f"Current token: {next_page_token}")
+                    logger.debug(f"New token: {new_next_page_token}")
+                    logger.debug(f"Has next_page_token: {bool(new_next_page_token)}")
+                    
                     # Check if we got the same token again
                     if new_next_page_token == next_page_token:
                         logger.warning(f"API returned the same next_page_token: {new_next_page_token}")
+                        logger.warning(f"Breaking pagination to prevent infinite loop")
+                        break
+                    
+                    # Additional check: if we got 0 new messages and there's a next_page_token,
+                    # this might indicate an API issue
+                    if new_message_count == 0 and new_next_page_token:
+                        logger.warning(f"No new messages but API says there's a next page - possible API issue")
                         logger.warning(f"Breaking pagination to prevent infinite loop")
                         break
                     
