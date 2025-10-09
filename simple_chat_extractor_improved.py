@@ -960,6 +960,126 @@ class ImprovedChatExtractor:
         logger.info(f"Files: {len(result.get('downloaded_files', []))}")
         
         return result
+    
+    def extract_specific_channels(self, channel_ids: List[str], days: int = 30, download_files: bool = True,
+                                 extractor_user: str = "me", debug: bool = False) -> Dict[str, Any]:
+        """Extract messages from specific channels only (no discovery)"""
+        
+        logger.info(f"Extracting messages from {len(channel_ids)} specific channels (skipping discovery)")
+        
+        # Initialize progress tracking
+        progress = {
+            "extraction_started": datetime.now().isoformat(),
+            "completed_channels": [],
+            "failed_channels": [],
+            "total_channels": len(channel_ids),
+            "success_count": 0,
+            "failure_count": 0
+        }
+        
+        results = []
+        total_messages = 0
+        total_files = 0
+        
+        for i, channel_id in enumerate(channel_ids, 1):
+            logger.info(f"[{i}/{len(channel_ids)}] Processing specific channel: {channel_id}")
+            
+            try:
+                # Get channel details
+                channel_info = self.get_channel_details(channel_id)
+                channel_name = channel_info.get("name", "Unknown") if channel_info else "Unknown"
+                
+                if not channel_info:
+                    logger.warning(f"Could not get details for channel {channel_id}, using basic info")
+                    channel_info = {"id": channel_id, "name": "Unknown", "type": "unknown"}
+                
+                # Extract messages
+                result = self.extract_channel_messages(
+                    channel_id=channel_id,
+                    channel_name=channel_name,
+                    channel_info=channel_info,
+                    days=days,
+                    download_files=download_files,
+                    extractor_user=extractor_user,
+                    debug=debug
+                )
+                
+                message_count = result.get("message_count", 0)
+                
+                # Track success/failure
+                if message_count > 0:
+                    logger.info(f"✅ SUCCESS: {channel_name} - {message_count} messages extracted")
+                    progress["success_count"] += 1
+                    progress["completed_channels"].append({
+                        "channel_id": channel_id,
+                        "channel_name": channel_name,
+                        "message_count": message_count,
+                        "files_count": len(result.get("downloaded_files", [])),
+                        "completed_at": datetime.now().isoformat(),
+                        "extractor_user": extractor_user
+                    })
+                else:
+                    logger.warning(f"❌ FAILURE: {channel_name} - 0 messages extracted")
+                    progress["failure_count"] += 1
+                    progress["failed_channels"].append({
+                        "channel_id": channel_id,
+                        "channel_name": channel_name,
+                        "reason": "No messages found",
+                        "failed_at": datetime.now().isoformat(),
+                        "extractor_user": extractor_user
+                    })
+                
+                result["channel_id"] = channel_id
+                results.append(result)
+                total_messages += message_count
+                total_files += len(result.get("downloaded_files", []))
+                
+            except Exception as e:
+                logger.error(f"❌ FAILURE: Channel {channel_id} - Exception: {e}")
+                progress["failure_count"] += 1
+                progress["failed_channels"].append({
+                    "channel_id": channel_id,
+                    "channel_name": "Unknown",
+                    "reason": f"Exception: {str(e)}",
+                    "failed_at": datetime.now().isoformat(),
+                    "extractor_user": extractor_user
+                })
+                continue
+        
+        # Create summary
+        summary = {
+            "extraction_date": datetime.now().isoformat(),
+            "extraction_type": "specific_channels_only",
+            "requested_channels": channel_ids,
+            "total_channels": len(channel_ids),
+            "processed_channels": len(results),
+            "total_messages": total_messages,
+            "total_files": total_files,
+            "date_range_days": days,
+            "download_files": download_files,
+            "extractor_user": extractor_user,
+            "skip_channel_discovery": True,
+            "success_count": progress["success_count"],
+            "failure_count": progress["failure_count"],
+            "success_rate": f"{(progress['success_count'] / len(channel_ids) * 100):.1f}%" if len(channel_ids) > 0 else "0%",
+            "results": results,
+            "progress_tracking": progress
+        }
+        
+        # Save summary
+        summary_file = self.output_dir / "_metadata" / "specific_channels_extraction_summary.json"
+        with open(summary_file, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Specific channels extraction complete!")
+        logger.info(f"Processed {len(results)}/{len(channel_ids)} channels")
+        logger.info(f"✅ SUCCESS: {progress['success_count']} channels with messages")
+        logger.info(f"❌ FAILURE: {progress['failure_count']} channels with no messages")
+        logger.info(f"📊 Success Rate: {(progress['success_count'] / len(channel_ids) * 100):.1f}%")
+        logger.info(f"Total messages: {total_messages}")
+        logger.info(f"Total files: {total_files}")
+        
+        return summary
 
 def main():
     """Main CLI function"""
@@ -972,10 +1092,19 @@ def main():
     @click.option('--no-inactive', is_flag=True, help='Skip inactive users when collecting channels')
     @click.option('--list-channels', is_flag=True, help='Just list unique channels and exit')
     @click.option('--channel-id', help='Extract messages from a specific channel ID only')
+    @click.option('--channel-ids', multiple=True, help='Extract messages from multiple specific channel IDs (can be used multiple times)')
+    @click.option('--skip-channel-discovery', is_flag=True, help='Skip channel discovery and only extract from specified channels')
     @click.option('--debug', is_flag=True, help='Enable debug logging for detailed API information')
     @click.option('--resume', is_flag=True, help='Resume extraction from where it left off (skips already processed channels)')
-    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, debug, resume):
-        """Improved Simple Zoom Chat Extractor - No Duplicate Channels"""
+    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, channel_ids, skip_channel_discovery, debug, resume):
+        """Improved Simple Zoom Chat Extractor - No Duplicate Channels
+        
+        Extraction Modes:
+        - Default: Discover all channels and extract from all unique channels
+        - Single: Extract from one specific channel (--channel-id)
+        - Specific: Extract from multiple specific channels without discovery (--skip-channel-discovery --channel-ids)
+        - List: Just list all discoverable channels (--list-channels)
+        """
         
         # Set debug logging level if requested
         if debug:
@@ -1009,8 +1138,34 @@ def main():
                     logger.info(f"  {channel_id}: {channel_name} (accessible by {len(accessible_users)} users)")
                 return 0
             
-            # Single channel extraction mode
-            if channel_id:
+            # Handle different extraction modes
+            if skip_channel_discovery:
+                # Skip discovery mode - only extract from specified channels
+                target_channels = []
+                
+                # Add single channel ID if provided
+                if channel_id:
+                    target_channels.append(channel_id)
+                
+                # Add multiple channel IDs if provided
+                if channel_ids:
+                    target_channels.extend(channel_ids)
+                
+                if not target_channels:
+                    logger.error("❌ ERROR: --skip-channel-discovery requires --channel-id or --channel-ids to be specified")
+                    return 1
+                
+                logger.info(f"🚀 Skipping channel discovery, extracting from {len(target_channels)} specified channels")
+                result = extractor.extract_specific_channels(
+                    channel_ids=target_channels,
+                    days=days,
+                    download_files=download_files,
+                    extractor_user=extractor_user,
+                    debug=debug
+                )
+                
+            elif channel_id:
+                # Single channel extraction mode
                 result = extractor.extract_single_channel(
                     channel_id=channel_id,
                     days=days,
@@ -1019,7 +1174,7 @@ def main():
                     debug=debug
                 )
             else:
-                # Extract from all unique channels
+                # Extract from all unique channels (default mode)
                 result = extractor.extract_all_unique_channels(
                     days=days,
                     download_files=download_files,
