@@ -1080,6 +1080,281 @@ class ImprovedChatExtractor:
         logger.info(f"Total files: {total_files}")
         
         return summary
+    
+    def extract_direct_messages_only(self, days: int = 30, download_files: bool = True,
+                                   extractor_user: str = "me", debug: bool = False, 
+                                   include_inactive: bool = True) -> Dict[str, Any]:
+        """Extract only direct messages (one-on-one conversations) between users"""
+        
+        logger.info("Extracting direct messages only (one-on-one conversations)")
+        
+        # Initialize user enumerator
+        user_enumerator = UserEnumerator(self.auth_headers)
+        
+        # Get all users
+        all_users = []
+        
+        logger.info("Getting active users...")
+        try:
+            active_users = list(user_enumerator.list_all_users(user_type="active"))
+            all_users.extend(active_users)
+            logger.info(f"Found {len(active_users)} active users")
+        except Exception as e:
+            logger.error(f"Could not get active users: {e}")
+        
+        if include_inactive:
+            logger.info("Getting inactive users...")
+            try:
+                inactive_users = list(user_enumerator.list_all_users(user_type="inactive"))
+                all_users.extend(inactive_users)
+                logger.info(f"Found {len(inactive_users)} inactive users")
+            except Exception as e:
+                logger.error(f"Could not get inactive users: {e}")
+        
+        logger.info("Getting pending users...")
+        try:
+            pending_users = list(user_enumerator.list_all_users(user_type="pending"))
+            all_users.extend(pending_users)
+            logger.info(f"Found {len(pending_users)} pending users")
+        except Exception as e:
+            logger.error(f"Could not get pending users: {e}")
+        
+        logger.info(f"Total users to process for direct messages: {len(all_users)}")
+        
+        # Calculate date range
+        to_date = datetime.now().isoformat() + "Z"
+        if days >= 365:
+            from_date = "2020-01-01T00:00:00Z"
+        else:
+            from_date = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
+        
+        # Initialize progress tracking
+        progress = {
+            "extraction_started": datetime.now().isoformat(),
+            "completed_users": [],
+            "failed_users": [],
+            "total_users": len(all_users),
+            "success_count": 0,
+            "failure_count": 0,
+            "total_direct_messages": 0,
+            "total_files": 0
+        }
+        
+        # Create direct messages directory
+        dm_dir = self.output_dir / "direct_messages"
+        dm_dir.mkdir(exist_ok=True)
+        
+        results = []
+        
+        for i, user in enumerate(tqdm(all_users, desc="Processing direct messages"), 1):
+            user_email = user.get("email")
+            user_id = user.get("id")
+            
+            if not user_email or not user_id:
+                logger.warning(f"Skipping user {i} - missing email or ID")
+                continue
+            
+            logger.info(f"[{i}/{len(all_users)}] Processing direct messages for: {user_email}")
+            
+            try:
+                # Get user's contacts for direct messages
+                contacts = self._get_user_contacts_official(user_id)
+                
+                if not contacts:
+                    logger.info(f"No contacts found for user {user_email}")
+                    progress["completed_users"].append({
+                        "user_email": user_email,
+                        "user_id": user_id,
+                        "contacts_count": 0,
+                        "messages_count": 0,
+                        "completed_at": datetime.now().isoformat()
+                    })
+                    continue
+                
+                logger.info(f"Found {len(contacts)} contacts for {user_email}")
+                
+                user_direct_messages = []
+                downloaded_files = []
+                
+                # Extract messages with each contact
+                for contact in contacts:
+                    contact_id = contact.get("identifier") or contact.get("id") or contact.get("email")
+                    contact_name = contact.get("display_name", contact.get("email", "Unknown"))
+                    
+                    if not contact_id:
+                        continue
+                    
+                    logger.debug(f"Checking direct messages with: {contact_name} ({contact_id})")
+                    
+                    # Get direct messages with this contact
+                    messages = self.get_messages(
+                        user_id=user_id,
+                        to_contact=contact_id,
+                        from_date=from_date,
+                        to_date=to_date,
+                        include_files=download_files,
+                        include_deleted_and_edited=True
+                    )
+                    
+                    if messages:
+                        logger.info(f"Found {len(messages)} direct messages with {contact_name}")
+                        
+                        # Add contact info to messages
+                        for message in messages:
+                            message["contact_info"] = {
+                                "contact_id": contact_id,
+                                "contact_name": contact_name
+                            }
+                        
+                        user_direct_messages.extend(messages)
+                        
+                        # Download files if requested
+                        if download_files:
+                            for message in messages:
+                                files = message.get("files", [])
+                                for file_info in files:
+                                    file_path = self.download_file(file_info, f"direct_messages_{user_email.replace('@', '_').replace('.', '_')}")
+                                    if file_path:
+                                        downloaded_files.append(file_path)
+                
+                # Save user's direct messages
+                if user_direct_messages:
+                    safe_email = user_email.replace("@", "_").replace(".", "_")
+                    
+                    # Save JSON
+                    messages_file = dm_dir / f"{safe_email}_direct_messages.json"
+                    with open(messages_file, 'w', encoding='utf-8') as f:
+                        json.dump(user_direct_messages, f, indent=2, ensure_ascii=False)
+                    
+                    # Save human-readable text
+                    text_file = dm_dir / f"{safe_email}_direct_messages.txt"
+                    self._create_human_readable_export(user_direct_messages, text_file)
+                    
+                    logger.info(f"✅ SUCCESS: {user_email} - {len(user_direct_messages)} direct messages")
+                    progress["success_count"] += 1
+                    progress["total_direct_messages"] += len(user_direct_messages)
+                    progress["total_files"] += len(downloaded_files)
+                    
+                    progress["completed_users"].append({
+                        "user_email": user_email,
+                        "user_id": user_id,
+                        "contacts_count": len(contacts),
+                        "messages_count": len(user_direct_messages),
+                        "files_count": len(downloaded_files),
+                        "messages_file": str(messages_file),
+                        "text_file": str(text_file),
+                        "completed_at": datetime.now().isoformat()
+                    })
+                    
+                    results.append({
+                        "user_email": user_email,
+                        "user_id": user_id,
+                        "message_count": len(user_direct_messages),
+                        "contacts_count": len(contacts),
+                        "files_count": len(downloaded_files),
+                        "messages_file": str(messages_file),
+                        "text_file": str(text_file)
+                    })
+                else:
+                    logger.info(f"No direct messages found for {user_email}")
+                    progress["completed_users"].append({
+                        "user_email": user_email,
+                        "user_id": user_id,
+                        "contacts_count": len(contacts),
+                        "messages_count": 0,
+                        "completed_at": datetime.now().isoformat()
+                    })
+                
+            except Exception as e:
+                logger.error(f"❌ FAILURE: {user_email} - Exception: {e}")
+                progress["failure_count"] += 1
+                progress["failed_users"].append({
+                    "user_email": user_email,
+                    "user_id": user_id,
+                    "reason": f"Exception: {str(e)}",
+                    "failed_at": datetime.now().isoformat()
+                })
+                continue
+        
+        # Create summary
+        summary = {
+            "extraction_date": datetime.now().isoformat(),
+            "extraction_type": "direct_messages_only",
+            "total_users": len(all_users),
+            "processed_users": len(results),
+            "total_direct_messages": progress["total_direct_messages"],
+            "total_files": progress["total_files"],
+            "date_range_days": days,
+            "download_files": download_files,
+            "extractor_user": extractor_user,
+            "include_inactive_users": include_inactive,
+            "success_count": progress["success_count"],
+            "failure_count": progress["failure_count"],
+            "success_rate": f"{(progress['success_count'] / len(all_users) * 100):.1f}%" if len(all_users) > 0 else "0%",
+            "results": results,
+            "progress_tracking": progress
+        }
+        
+        # Save summary
+        summary_file = self.output_dir / "_metadata" / "direct_messages_extraction_summary.json"
+        with open(summary_file, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Direct messages extraction complete!")
+        logger.info(f"Processed {len(results)}/{len(all_users)} users")
+        logger.info(f"✅ SUCCESS: {progress['success_count']} users with direct messages")
+        logger.info(f"❌ FAILURE: {progress['failure_count']} users with no direct messages")
+        logger.info(f"📊 Success Rate: {(progress['success_count'] / len(all_users) * 100):.1f}%")
+        logger.info(f"Total direct messages: {progress['total_direct_messages']}")
+        logger.info(f"Total files: {progress['total_files']}")
+        
+        return summary
+    
+    def _get_user_contacts_official(self, user_id: str) -> List[Dict]:
+        """Get user's contacts using the official GET /chat/users/me/contacts endpoint"""
+        contacts = []
+        
+        try:
+            logger.debug(f"Getting contacts for user {user_id}")
+            
+            # Use the official contacts endpoint
+            url = "https://api.zoom.us/v2/chat/users/me/contacts"
+            params = {
+                "page_size": 50
+            }
+            
+            next_page_token = None
+            
+            while True:
+                if next_page_token:
+                    params["next_page_token"] = next_page_token
+                
+                self.rate_limiter.sleep(0)
+                response = self.make_api_request(url, params)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    page_contacts = data.get("contacts", [])
+                    contacts.extend(page_contacts)
+                    
+                    logger.debug(f"Retrieved {len(page_contacts)} contacts from API")
+                    
+                    next_page_token = data.get("next_page_token")
+                    if not next_page_token:
+                        break
+                        
+                elif response.status_code == 404:
+                    logger.debug(f"No contacts found for user {user_id}")
+                    break
+                else:
+                    logger.error(f"Failed to fetch contacts: {response.status_code} - {response.text}")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error getting contacts: {e}")
+        
+        logger.debug(f"Found {len(contacts)} total contacts")
+        return contacts
 
 def main():
     """Main CLI function"""
@@ -1094,15 +1369,17 @@ def main():
     @click.option('--channel-id', help='Extract messages from a specific channel ID only')
     @click.option('--channel-ids', multiple=True, help='Extract messages from multiple specific channel IDs (can be used multiple times)')
     @click.option('--skip-channel-discovery', is_flag=True, help='Skip channel discovery and only extract from specified channels')
+    @click.option('--direct-messages-only', is_flag=True, help='Extract only direct messages (one-on-one conversations), skip all channels')
     @click.option('--debug', is_flag=True, help='Enable debug logging for detailed API information')
     @click.option('--resume', is_flag=True, help='Resume extraction from where it left off (skips already processed channels)')
-    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, channel_ids, skip_channel_discovery, debug, resume):
+    def cli(extractor_user, days, output_dir, no_files, no_inactive, list_channels, channel_id, channel_ids, skip_channel_discovery, direct_messages_only, debug, resume):
         """Improved Simple Zoom Chat Extractor - No Duplicate Channels
         
         Extraction Modes:
         - Default: Discover all channels and extract from all unique channels
         - Single: Extract from one specific channel (--channel-id)
         - Specific: Extract from multiple specific channels without discovery (--skip-channel-discovery --channel-ids)
+        - Direct Messages: Extract only direct messages (one-on-one conversations) (--direct-messages-only)
         - List: Just list all discoverable channels (--list-channels)
         """
         
@@ -1139,7 +1416,18 @@ def main():
                 return 0
             
             # Handle different extraction modes
-            if skip_channel_discovery:
+            if direct_messages_only:
+                # Direct messages only mode - skip all channels
+                logger.info("🚀 Direct messages only mode - skipping all channels")
+                result = extractor.extract_direct_messages_only(
+                    days=days,
+                    download_files=download_files,
+                    extractor_user=extractor_user,
+                    debug=debug,
+                    include_inactive=include_inactive
+                )
+                
+            elif skip_channel_discovery:
                 # Skip discovery mode - only extract from specified channels
                 target_channels = []
                 
