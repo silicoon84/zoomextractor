@@ -70,6 +70,9 @@ class ExtractionState:
             # Create backup of existing state file
             if self.state_file.exists():
                 backup_file = self.state_file.with_suffix('.bak')
+                # Remove existing backup if it exists (Windows compatibility)
+                if backup_file.exists():
+                    backup_file.unlink()
                 self.state_file.rename(backup_file)
             
             # Write new state

@@ -15,15 +15,23 @@ logger = logging.getLogger(__name__)
 class UserEnumerator:
     """Handles enumeration of Zoom users with pagination and filtering."""
     
-    def __init__(self, auth_headers: Dict[str, str]):
+    def __init__(self, auth_headers: Dict[str, str], auth=None):
         """
         Initialize user enumerator.
         
         Args:
             auth_headers: Authorization headers for API requests
+            auth: Optional ZoomAuth instance for automatic token refresh
         """
         self.auth_headers = auth_headers
+        self.auth = auth
         self.base_url = "https://api.zoom.us/v2"
+    
+    def _get_headers(self) -> Dict[str, str]:
+        """Get fresh auth headers, refreshing token if needed."""
+        if self.auth:
+            return self.auth.get_auth_headers()
+        return self.auth_headers
     
     def list_all_users(self, user_filter: Optional[List[str]] = None, 
                       user_type: str = "active") -> Iterator[Dict]:
@@ -52,7 +60,7 @@ class UserEnumerator:
             logger.debug(f"Fetching users page with params: {params}")
             
             try:
-                response = requests.get(url, headers=self.auth_headers, params=params, timeout=30)
+                response = requests.get(url, headers=self._get_headers(), params=params, timeout=30)
                 response.raise_for_status()
                 
                 data = response.json()
@@ -119,7 +127,7 @@ class UserEnumerator:
             encoded_email = quote(email, safe='')
             
             url = f"{self.base_url}/users/{encoded_email}"
-            response = requests.get(url, headers=self.auth_headers, timeout=30)
+            response = requests.get(url, headers=self._get_headers(), timeout=30)
             response.raise_for_status()
             
             return response.json()
@@ -140,7 +148,7 @@ class UserEnumerator:
         """
         try:
             url = f"{self.base_url}/users/{user_id}"
-            response = requests.get(url, headers=self.auth_headers, timeout=30)
+            response = requests.get(url, headers=self._get_headers(), timeout=30)
             response.raise_for_status()
             
             return response.json()

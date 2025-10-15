@@ -16,15 +16,23 @@ logger = logging.getLogger(__name__)
 class EdgeCaseHandler:
     """Handles various edge cases and special scenarios."""
     
-    def __init__(self, auth_headers: Dict[str, str]):
+    def __init__(self, auth_headers: Dict[str, str], auth=None):
         """
         Initialize edge case handler.
         
         Args:
             auth_headers: Authorization headers for API requests
+            auth: Optional ZoomAuth instance for automatic token refresh
         """
         self.auth_headers = auth_headers
+        self.auth = auth
         self.base_url = "https://api.zoom.us/v2"
+    
+    def _get_headers(self) -> Dict[str, str]:
+        """Get fresh auth headers, refreshing token if needed."""
+        if self.auth:
+            return self.auth.get_auth_headers()
+        return self.auth_headers
     
     def check_recording_in_trash(self, meeting_uuid: str) -> Tuple[bool, Optional[Dict]]:
         """
@@ -39,7 +47,7 @@ class EdgeCaseHandler:
         try:
             # Try to get recording info
             url = f"{self.base_url}/meetings/{meeting_uuid}/recordings"
-            response = requests.get(url, headers=self.auth_headers, timeout=30)
+            response = requests.get(url, headers=self._get_headers(), timeout=30)
             
             if response.status_code == 404:
                 # Recording not found, might be in trash
@@ -111,7 +119,7 @@ class EdgeCaseHandler:
         """
         try:
             # First, try with Authorization header
-            headers = self.auth_headers.copy()
+            headers = self._get_headers().copy()
             response = requests.head(download_url, headers=headers, timeout=30, allow_redirects=True)
             
             # Check if we get redirected to a passcode page
@@ -301,7 +309,7 @@ class EdgeCaseHandler:
         options.append({
             "method": "header",
             "url": download_url,
-            "headers": self.auth_headers,
+            "headers": self._get_headers(),
             "description": "Authorization header method"
         })
         

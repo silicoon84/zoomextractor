@@ -57,15 +57,15 @@ def extract_all_recordings(
     if not to_date:
         to_date = datetime.now().strftime('%Y-%m-%d')
     
-    print("🚀 Enhanced Zoom Recordings Extractor")
+    print("[START] Enhanced Zoom Recordings Extractor")
     print("=" * 50)
-    print(f"📁 Output Directory: {output_dir}")
-    print(f"👥 User Filter: {user_filter or 'All users'}")
-    print(f"📅 Date Range: {from_date} to {to_date}")
-    print(f"🗑️  Include Trash: {include_trash}")
-    print(f"👻 Include Inactive Users: {include_inactive_users}")
-    print(f"⚡ Max Concurrent: {max_concurrent}")
-    print(f"🧪 Dry Run: {dry_run}")
+    print(f"[DIR] Output Directory: {output_dir}")
+    print(f"[USERS] User Filter: {user_filter or 'All users'}")
+    print(f"[DATE] Date Range: {from_date} to {to_date}")
+    print(f"[TRASH] Include Trash: {include_trash}")
+    print(f"[INACTIVE] Include Inactive Users: {include_inactive_users}")
+    print(f"[CONCURRENT] Max Concurrent: {max_concurrent}")
+    print(f"[DRY-RUN] Dry Run: {dry_run}")
     print("=" * 50)
     
     # Initialize components
@@ -80,38 +80,38 @@ def extract_all_recordings(
     state = ExtractionState(state_file)
     
     # Initialize components
-    user_enumerator = UserEnumerator(headers)
-    recordings_lister = RecordingsLister(headers)
+    user_enumerator = UserEnumerator(headers, auth)
+    recordings_lister = RecordingsLister(headers, auth)
     date_generator = DateWindowGenerator(from_date, to_date)
     structure = DirectoryStructure(output_dir)
-    edge_handler = EdgeCaseHandler(headers)
+    edge_handler = EdgeCaseHandler(headers, auth)
     
     if not dry_run:
-        downloader = FileDownloader(headers, max_concurrent)
+        downloader = FileDownloader(headers, max_concurrent, auth=auth)
     
     # Get all users (active + inactive if requested)
     all_users = []
     
     # Always get active users
-    print("📋 Getting active users...")
+    print("[INFO] Getting active users...")
     active_users = list(user_enumerator.list_all_users(user_filter, user_type="active"))
     all_users.extend(active_users)
     print(f"   Found {len(active_users)} active users")
     
     # Get inactive users if requested
     if include_inactive_users:
-        print("📋 Getting inactive users...")
+        print("[INFO] Getting inactive users...")
         try:
             inactive_users = list(user_enumerator.list_all_users(user_filter, user_type="inactive"))
             all_users.extend(inactive_users)
             print(f"   Found {len(inactive_users)} inactive users")
         except Exception as e:
-            print(f"   ⚠️  Could not get inactive users: {e}")
+            print(f"   [WARN] Could not get inactive users: {e}")
     
-    print(f"🎯 Total users to process: {len(all_users)}")
+    print(f"[TARGET] Total users to process: {len(all_users)}")
     
     if not all_users:
-        print("❌ No users found to process")
+        print("[ERROR] No users found to process")
         return {"error": "No users found"}
     
     # Check for resume capability (after users are loaded)
@@ -121,11 +121,11 @@ def extract_all_recordings(
             existing_state = state.get_progress_summary()
             if existing_state and existing_state.get("users", {}).get("processed", 0) > 0:
                 start_from_user = existing_state["users"]["processed"]
-                print(f"🔄 RESUMING from user {start_from_user + 1}/{len(all_users)}")
+                print(f"[RESUME] RESUMING from user {start_from_user + 1}/{len(all_users)}")
             else:
-                print("🆕 Starting fresh extraction")
+                print("[NEW] Starting fresh extraction")
         except Exception as e:
-            print(f"🆕 Starting fresh extraction (error checking state: {e})")
+            print(f"[NEW] Starting fresh extraction (error checking state: {e})")
     
     # Process all users
     total_meetings = 0
@@ -141,20 +141,20 @@ def extract_all_recordings(
         user_email = user.get("email", "unknown")
         user_status = user.get("status", "unknown")
         
-        print(f"\n👤 [{user_idx}/{len(all_users)}] Processing {user_email} (status: {user_status})")
+        print(f"\n[USER] [{user_idx}/{len(all_users)}] Processing {user_email} (status: {user_status})")
         
         try:
             # Validate user access
             user_warnings = edge_handler.check_account_restrictions(user)
             if user_warnings:
-                print(f"   ⚠️  User warnings: {user_warnings}")
+                print(f"   [WARN] User warnings: {user_warnings}")
             
             user_meetings = 0
             user_files = 0
             
             # Process each date window
             for start_date, end_date in date_generator.generate_monthly_windows():
-                print(f"   📅 Processing {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+                print(f"   [DATE] Processing {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
                 
                 try:
                     recordings = list(recordings_lister.list_user_recordings(
@@ -165,12 +165,12 @@ def extract_all_recordings(
                         meeting_id = recording.get("id", "unknown")
                         meeting_topic = recording.get("topic", "Unknown Topic")
                         
-                        print(f"      📹 Meeting: {meeting_topic}")
+                        print(f"      [MEETING] Meeting: {meeting_topic}")
                         
                         # Validate meeting access
                         meeting_warnings = edge_handler.handle_meeting_type_restrictions(recording)
                         if meeting_warnings:
-                            print(f"         ⚠️  Meeting warnings: {meeting_warnings}")
+                            print(f"         [WARN] Meeting warnings: {meeting_warnings}")
                         
                         user_meetings += 1
                         
@@ -185,7 +185,7 @@ def extract_all_recordings(
                             if file_path.exists() and not dry_run:
                                 file_size = file_path.stat().st_size
                                 total_size += file_size
-                                print(f"         ⏭️  Skipped (already exists): {file_path.name}")
+                                print(f"         [SKIP] Skipped (already exists): {file_path.name}")
                                 # Mark file as processed in state
                                 state.mark_file_processed(file_info.get("id", ""), "skipped")
                                 continue
@@ -200,17 +200,17 @@ def extract_all_recordings(
                                     if success:
                                         file_size = stats.get("file_size", 0)
                                         total_size += file_size
-                                        print(f"         ✅ Downloaded: {file_path.name}")
+                                        print(f"         [OK] Downloaded: {file_path.name}")
                                         
                                         # Mark file as processed in state
                                         state.mark_file_processed(file_info.get("id", ""), "downloaded")
                                     else:
-                                        print(f"         ❌ Failed: {file_path.name}")
+                                        print(f"         [ERROR] Failed: {file_path.name}")
                                         
                                         # Mark file as failed in state
                                         state.mark_file_processed(file_info.get("id", ""), "failed")
                                 except Exception as e:
-                                    print(f"         ❌ Download error: {e}")
+                                    print(f"         [ERROR] Download error: {e}")
                                     
                                     # Mark file as error in state
                                     state.mark_file_processed(file_info.get("id", ""), "error")
@@ -218,21 +218,21 @@ def extract_all_recordings(
                                 # Dry run - just count
                                 file_size = file_info.get("file_size", 0)
                                 total_size += file_size
-                                print(f"         🔍 Would download: {file_info.get('file_type', 'unknown')} ({file_size} bytes)")
+                                print(f"         [DRY] Would download: {file_info.get('file_type', 'unknown')} ({file_size} bytes)")
                                 
                                 # Mark file as dry run in state
                                 state.mark_file_processed(file_info.get("id", ""), "dry_run")
                 
                 except Exception as e:
-                    print(f"      ❌ Error processing date window: {e}")
+                    print(f"      [ERROR] Error processing date window: {e}")
                     continue
             
-            print(f"   📊 User summary: {user_meetings} meetings, {user_files} files")
+            print(f"   [SUMMARY] User summary: {user_meetings} meetings, {user_files} files")
             total_meetings += user_meetings
             total_files += user_files
             
         except Exception as e:
-            print(f"   ❌ Error processing user {user_email}: {e}")
+            print(f"   [ERROR] Error processing user {user_email}: {e}")
         
         # Always increment processed_users, regardless of success/failure
         processed_users += 1
@@ -243,19 +243,19 @@ def extract_all_recordings(
         # Save progress every 10 users
         if processed_users % 10 == 0:
             state._save_state()
-            print(f"   💾 Progress saved ({processed_users}/{len(all_users)} users processed)")
+            print(f"   [SAVED] Progress saved ({processed_users}/{len(all_users)} users processed)")
     
     # Final summary
-    print(f"\n🎉 EXTRACTION COMPLETE")
+    print(f"\n[COMPLETE] EXTRACTION COMPLETE")
     print("=" * 50)
-    print(f"👥 Users processed: {processed_users}/{len(all_users)}")
-    print(f"📹 Total meetings: {total_meetings}")
-    print(f"📁 Total files: {total_files}")
-    print(f"💾 Total size: {total_size / (1024**3):.2f} GB")
+    print(f"[USERS] Users processed: {processed_users}/{len(all_users)}")
+    print(f"[MEETINGS] Total meetings: {total_meetings}")
+    print(f"[FILES] Total files: {total_files}")
+    print(f"[SIZE] Total size: {total_size / (1024**3):.2f} GB")
     
     if dry_run:
-        print(f"🧪 DRY RUN - No files were actually downloaded")
-        print(f"💡 Run without --dry-run to perform actual downloads")
+        print(f"[DRY-RUN] DRY RUN - No files were actually downloaded")
+        print(f"[TIP] Run without --dry-run to perform actual downloads")
     
     # Save final state
     state._save_state()
@@ -273,7 +273,7 @@ def extract_all_recordings(
         f.write(f"Dry run: {dry_run}\n")
         f.write(f"Output directory: {output_path.absolute()}\n")
     
-    print(f"📝 Summary saved to: {log_file}")
+    print(f"[LOG] Summary saved to: {log_file}")
     
     return {
         "users_processed": processed_users,
@@ -329,17 +329,17 @@ def main():
         )
         
         if "error" in result:
-            print(f"❌ Extraction failed: {result['error']}")
+            print(f"[ERROR] Extraction failed: {result['error']}")
             return 1
         
-        print(f"✅ Extraction completed successfully!")
+        print(f"[OK] Extraction completed successfully!")
         return 0
         
     except KeyboardInterrupt:
-        print(f"\n⏹️  Extraction interrupted by user")
+        print(f"\n[STOP] Extraction interrupted by user")
         return 1
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERROR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return 1

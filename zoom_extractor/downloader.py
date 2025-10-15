@@ -22,7 +22,7 @@ class FileDownloader:
     """Handles downloading files with resume capability and rate limiting."""
     
     def __init__(self, auth_headers: Dict[str, str], max_concurrent: int = 2, 
-                 chunk_size: int = 8388608, timeout: int = 300):
+                 chunk_size: int = 8388608, timeout: int = 300, auth=None):
         """
         Initialize file downloader.
         
@@ -31,14 +31,22 @@ class FileDownloader:
             max_concurrent: Maximum concurrent downloads
             chunk_size: Chunk size for streaming downloads (default 8MB)
             timeout: Request timeout in seconds
+            auth: Optional ZoomAuth instance for automatic token refresh
         """
         self.auth_headers = auth_headers
+        self.auth = auth
         self.max_concurrent = max_concurrent
         self.chunk_size = chunk_size
         self.timeout = timeout
         self._rate_limit_lock = threading.Lock()
         self._last_request_time = 0
         self._min_request_interval = 0.1  # 100ms between requests
+    
+    def _get_headers(self) -> Dict[str, str]:
+        """Get fresh auth headers, refreshing token if needed."""
+        if self.auth:
+            return self.auth.get_auth_headers()
+        return self.auth_headers
     
     def _apply_rate_limit(self) -> None:
         """Apply rate limiting between requests."""
@@ -91,7 +99,7 @@ class FileDownloader:
         try:
             self._apply_rate_limit()
             
-            headers = self.auth_headers.copy()
+            headers = self._get_headers().copy()
             
             # Check if file already exists and get current size for resume
             resume_header = {}
