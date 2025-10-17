@@ -35,7 +35,8 @@ def extract_all_recordings(
     include_inactive_users: bool = True,
     max_concurrent: int = 2,
     dry_run: bool = True,
-    resume: bool = True
+    resume: bool = True,
+    max_retries: int = 3
 ):
     """
     Extract recordings from ALL users including inactive/deleted ones.
@@ -49,6 +50,8 @@ def extract_all_recordings(
         include_inactive_users: Whether to include inactive/deleted users
         max_concurrent: Maximum concurrent downloads
         dry_run: If True, don't actually download files
+        resume: Resume from previous state if True
+        max_retries: Maximum number of retry attempts for failed downloads (default: 3)
     """
     
     # Set default date range to 2 years if not specified
@@ -65,6 +68,7 @@ def extract_all_recordings(
     print(f"[TRASH] Include Trash: {include_trash}")
     print(f"[INACTIVE] Include Inactive Users: {include_inactive_users}")
     print(f"[CONCURRENT] Max Concurrent: {max_concurrent}")
+    print(f"[RETRIES] Max Retries per File: {max_retries}")
     print(f"[DRY-RUN] Dry Run: {dry_run}")
     print("=" * 50)
     
@@ -195,7 +199,7 @@ def extract_all_recordings(
                                 try:
                                     # Get access token from auth headers
                                     access_token = headers.get("Authorization", "").replace("Bearer ", "")
-                                    success, stats = downloader.download_file(file_info, file_path, access_token)
+                                    success, stats = downloader.download_file(file_info, file_path, access_token, max_retries=max_retries)
                                     
                                     if success:
                                         file_size = stats.get("file_size", 0)
@@ -205,7 +209,7 @@ def extract_all_recordings(
                                         # Mark file as processed in state
                                         state.mark_file_processed(file_info.get("id", ""), "downloaded")
                                     else:
-                                        print(f"         [ERROR] Failed: {file_path.name}")
+                                        print(f"         [ERROR] Failed after {max_retries} attempts: {file_path.name}")
                                         
                                         # Mark file as failed in state
                                         state.mark_file_processed(file_info.get("id", ""), "failed")
@@ -297,6 +301,7 @@ def main():
     parser.add_argument("--include-trash", action="store_true", default=True, help="Include trash recordings")
     parser.add_argument("--include-inactive", action="store_true", default=True, help="Include inactive users")
     parser.add_argument("--max-concurrent", type=int, default=2, help="Max concurrent downloads")
+    parser.add_argument("--max-retries", type=int, default=3, help="Max retry attempts for failed downloads (default: 3)")
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
     parser.add_argument("--resume", action="store_true", default=True, help="Resume from previous state (default: True)")
     parser.add_argument("--no-resume", action="store_true", help="Don't resume, start fresh")
@@ -325,7 +330,8 @@ def main():
             include_inactive_users=args.include_inactive,
             max_concurrent=args.max_concurrent,
             dry_run=args.dry_run,
-            resume=resume_enabled
+            resume=resume_enabled,
+            max_retries=args.max_retries
         )
         
         if "error" in result:

@@ -191,7 +191,8 @@ class FileDownloader:
             logger.error(f"Failed to download {url} with query param: {e}")
             return False
     
-    def download_file(self, file_info: Dict, target_path: Path, access_token: str) -> Tuple[bool, Dict]:
+    def download_file(self, file_info: Dict, target_path: Path, access_token: str, 
+                     max_retries: int = 3) -> Tuple[bool, Dict]:
         """
         Download a single file with retry logic and multiple auth methods.
         
@@ -199,6 +200,7 @@ class FileDownloader:
             file_info: File information dictionary
             target_path: Target file path
             access_token: OAuth access token
+            max_retries: Maximum number of retry attempts (default: 3)
             
         Returns:
             Tuple of (success, file_stats)
@@ -213,13 +215,43 @@ class FileDownloader:
         # Use temporary file during download
         temp_path = target_path.with_suffix(target_path.suffix + ".part")
         
-        # Try Authorization header method first (preferred)
-        success = self._download_with_headers(download_url, temp_path, expected_size)
-        
-        # If that fails, try query parameter method
-        if not success:
-            logger.warning(f"Header auth failed for {file_id}, trying query param auth")
-            success = self._download_with_query_param(download_url, temp_path, access_token, expected_size)
+        # Retry loop
+        for attempt in range(max_retries):
+            if attempt > 0:
+                logger.info(f"Retry attempt {attempt + 1}/{max_retries} for {file_id}")
+                
+                # Check if we need to refresh the token before retrying
+                if self.auth:
+                    logger.info(f"Checking token validity before retry...")
+                    try:
+                        # Force token refresh by getting fresh headers
+                        self.auth_headers = self.auth.get_auth_headers()
+                        # Update access token for query param method
+                        access_token = self.auth_headers.get("Authorization", "").replace("Bearer ", "")
+                        logger.info(f"Token refreshed successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to refresh token: {e}")
+                
+                # Wait before retrying (exponential backoff)
+                wait_time = 2 ** attempt  # 2, 4, 8 seconds
+                logger.info(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            
+            # Try Authorization header method first (preferred)
+            success = self._download_with_headers(download_url, temp_path, expected_size)
+            
+            # If that fails, try query parameter method
+            if not success:
+                logger.warning(f"Header auth failed for {file_id}, trying query param auth")
+                success = self._download_with_query_param(download_url, temp_path, access_token, expected_size)
+            
+            # If successful, break out of retry loop
+            if success:
+                break
+            
+            # If this was the last attempt, log final failure
+            if attempt == max_retries - 1:
+                logger.error(f"All {max_retries} download attempts failed for {file_id}")
         
         if success:
             # Validate file size
@@ -280,13 +312,14 @@ class FileDownloader:
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
     
-    def download_files_concurrent(self, downloads: list, access_token: str) -> list:
+    def download_files_concurrent(self, downloads: list, access_token: str, max_retries: int = 3) -> list:
         """
         Download multiple files concurrently with rate limiting.
         
         Args:
             downloads: List of (file_info, target_path) tuples
             access_token: OAuth access token
+            max_retries: Maximum number of retry attempts (default: 3)
             
         Returns:
             List of download results
@@ -296,7 +329,7 @@ class FileDownloader:
         with ThreadPoolExecutor(max_workers=self.max_concurrent) as executor:
             # Submit all download tasks
             future_to_download = {
-                executor.submit(self.download_file, file_info, target_path, access_token): (file_info, target_path)
+                executor.submit(self.download_file, file_info, target_path, access_token, max_retries): (file_info, target_path)
                 for file_info, target_path in downloads
             }
             
